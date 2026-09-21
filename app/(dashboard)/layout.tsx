@@ -1,4 +1,3 @@
-import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { createClient } from "@/lib/supabase/server";
 import { Toaster } from "@/components/ui/sonner";
@@ -14,12 +13,20 @@ export default async function DashboardLayout({
   } = await supabase.auth.getUser();
 
   return (
-    <div className="flex min-h-svh">
-      <Sidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar userEmail={user?.email} />
-        <main className="flex-1 overflow-x-hidden p-6">{children}</main>
-      </div>
+    <div className="flex min-h-dvh flex-col">
+      <a
+        href="#contenido"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:shadow-soft"
+      >
+        Saltar al contenido
+      </a>
+      <Topbar userEmail={user?.email} />
+      <main
+        id="contenido"
+        className="mx-auto w-full max-w-7xl flex-1 px-4 pt-8 pb-16 sm:px-6 lg:px-8 lg:pt-10"
+      >
+        {children}
+      </main>
       <Toaster />
     </div>
   );

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { ClienteForm } from "@/components/clientes/cliente-form";
+import { PageHeader } from "@/components/shared/page-header";
 
 export default async function EditarClientePage({
   params,
@@ -13,10 +14,12 @@ export default async function EditarClientePage({
   if (!cliente) notFound();
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">
-        Editar cliente: {cliente.nombre} {cliente.apellidos}
-      </h1>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        back={{ href: `/clientes/${cliente.id}`, label: "Volver a la ficha" }}
+        eyebrow="Editar cliente"
+        title={`${cliente.nombre} ${cliente.apellidos}`}
+      />
       <ClienteForm cliente={cliente} />
     </div>
   );

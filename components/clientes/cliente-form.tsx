@@ -13,16 +13,14 @@ import {
 } from "@/lib/validations/cliente";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Card, CardContent } from "@/components/ui/card";
+  Field,
+  FormActions,
+  FormSection,
+  FormShell,
+  Segmented,
+} from "@/components/shared/form";
 import type { Cliente } from "@/lib/generated/prisma/client";
 
 function toDateInputValue(date: Date | null | undefined) {
@@ -71,95 +69,89 @@ export function ClienteForm({ cliente }: { cliente?: Cliente }) {
   }
 
   return (
-    <Card className="max-w-2xl">
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="nombre">Nombre</Label>
-              <Input id="nombre" {...register("nombre")} />
-              {errors.nombre && (
-                <p className="text-sm text-destructive">{errors.nombre.message}</p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="apellidos">Apellidos</Label>
-              <Input id="apellidos" {...register("apellidos")} />
-              {errors.apellidos && (
-                <p className="text-sm text-destructive">{errors.apellidos.message}</p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="telefono">Teléfono</Label>
-              <Input id="telefono" {...register("telefono")} />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" {...register("email")} />
-              {errors.email && (
-                <p className="text-sm text-destructive">{errors.email.message}</p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2 sm:col-span-2">
-              <Label htmlFor="direccion">Dirección</Label>
-              <Input id="direccion" {...register("direccion")} />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label>Tipo de cliente</Label>
-              <Controller
-                control={control}
+    <FormShell onSubmit={handleSubmit(onSubmit)} noValidate className="max-w-4xl">
+      <FormSection title="Identidad" description="Cómo aparecerá el cliente en listados y búsquedas.">
+        <Field label="Nombre" htmlFor="nombre" error={errors.nombre?.message}>
+          <Input
+            id="nombre"
+            autoComplete="off"
+            aria-invalid={!!errors.nombre}
+            aria-describedby={errors.nombre ? "nombre-error" : undefined}
+            {...register("nombre")}
+          />
+        </Field>
+        <Field label="Apellidos" htmlFor="apellidos" error={errors.apellidos?.message}>
+          <Input
+            id="apellidos"
+            autoComplete="off"
+            aria-invalid={!!errors.apellidos}
+            aria-describedby={errors.apellidos ? "apellidos-error" : undefined}
+            {...register("apellidos")}
+          />
+        </Field>
+        <Field label="Tipo de cliente" className="sm:col-span-2">
+          <Controller
+            control={control}
+            name="tipoCliente"
+            render={({ field }) => (
+              <Segmented
                 name="tipoCliente"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Selecciona un tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(TIPO_CLIENTE_LABELS).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
+                aria-label="Tipo de cliente"
+                value={field.value}
+                onChange={field.onChange}
+                options={TIPO_CLIENTE_LABELS}
               />
-            </div>
+            )}
+          />
+        </Field>
+      </FormSection>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="fechaProximoContacto">Próximo contacto</Label>
-              <Input
-                id="fechaProximoContacto"
-                type="date"
-                {...register("fechaProximoContacto")}
-              />
-            </div>
+      <FormSection title="Contacto" description="Teléfono o email para poder llamar o escribir al cliente.">
+        <Field label="Teléfono" htmlFor="telefono" optional>
+          <Input id="telefono" type="tel" inputMode="tel" placeholder="612 345 678" {...register("telefono")} />
+        </Field>
+        <Field label="Email" htmlFor="email" optional error={errors.email?.message}>
+          <Input
+            id="email"
+            type="email"
+            placeholder="nombre@correo.es"
+            aria-invalid={!!errors.email}
+            aria-describedby={errors.email ? "email-error" : undefined}
+            {...register("email")}
+          />
+        </Field>
+        <Field label="Dirección" htmlFor="direccion" optional className="sm:col-span-2">
+          <Input id="direccion" {...register("direccion")} />
+        </Field>
+      </FormSection>
 
-            <div className="flex flex-col gap-2 sm:col-span-2">
-              <Label htmlFor="notas">Notas</Label>
-              <Textarea id="notas" rows={4} {...register("notas")} />
-            </div>
-          </div>
+      <FormSection title="Seguimiento" description="La fecha de próximo contacto hace que el cliente aparezca en el panel cuando toque.">
+        <Field
+          label="Próximo contacto"
+          htmlFor="fechaProximoContacto"
+          optional
+          hint="Déjalo vacío si no hay nada programado."
+        >
+          <Input id="fechaProximoContacto" type="date" {...register("fechaProximoContacto")} />
+        </Field>
+        <Field label="Notas" htmlFor="notas" optional className="sm:col-span-2">
+          <Textarea
+            id="notas"
+            rows={4}
+            placeholder="Qué busca, presupuesto, disponibilidad para visitas…"
+            {...register("notas")}
+          />
+        </Field>
+      </FormSection>
 
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => router.back()}
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Guardando..." : "Guardar"}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+      <FormActions>
+        <Button type="button" variant="ghost" onClick={() => router.back()}>
+          Cancelar
+        </Button>
+        <Button type="submit" size="lg" disabled={isSubmitting}>
+          {isSubmitting ? "Guardando…" : cliente ? "Guardar cambios" : "Crear cliente"}
+        </Button>
+      </FormActions>
+    </FormShell>
   );
 }

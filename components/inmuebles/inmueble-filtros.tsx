@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
+import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -30,6 +31,10 @@ export function InmuebleFiltros({
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
   const [q, setQ] = useState(defaultQ ?? "");
+  // Controlled: the server re-renders with new defaults after each navigation,
+  // and an uncontrolled Select must not have its default changed after mount.
+  const [tipoOperacion, setTipoOperacion] = useState(defaultTipoOperacion ?? "TODOS");
+  const [estado, setEstado] = useState(defaultEstado ?? "TODOS");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function updateParams(next: { q?: string; tipoOperacion?: string; estado?: string }) {
@@ -49,23 +54,32 @@ export function InmuebleFiltros({
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-      <Input
-        placeholder="Buscar por referencia, dirección o localidad..."
-        value={q}
-        onChange={(e) => {
-          const value = e.target.value;
-          setQ(value);
-          if (debounceRef.current) clearTimeout(debounceRef.current);
-          debounceRef.current = setTimeout(() => updateParams({ q: value }), 300);
-        }}
-        className="sm:max-w-xs"
-      />
+      <div className="relative sm:w-80">
+        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          type="search"
+          aria-label="Buscar inmuebles"
+          placeholder="Referencia, dirección o localidad…"
+          value={q}
+          onChange={(e) => {
+            const value = e.target.value;
+            setQ(value);
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+            debounceRef.current = setTimeout(() => updateParams({ q: value }), 300);
+          }}
+          className="pl-9"
+        />
+      </div>
 
       <Select
-        defaultValue={defaultTipoOperacion ?? "TODOS"}
-        onValueChange={(value) => updateParams({ tipoOperacion: value as string })}
+        items={{ TODOS: "Venta y alquiler", ...TIPO_OPERACION_LABELS }}
+        value={tipoOperacion}
+        onValueChange={(value) => {
+          setTipoOperacion(value as string);
+          updateParams({ tipoOperacion: value as string });
+        }}
       >
-        <SelectTrigger className="sm:w-44">
+        <SelectTrigger className="w-full sm:w-44">
           <SelectValue placeholder="Venta/Alquiler" />
         </SelectTrigger>
         <SelectContent>
@@ -79,10 +93,14 @@ export function InmuebleFiltros({
       </Select>
 
       <Select
-        defaultValue={defaultEstado ?? "TODOS"}
-        onValueChange={(value) => updateParams({ estado: value as string })}
+        items={{ TODOS: "Todos los estados", ...ESTADO_INMUEBLE_LABELS }}
+        value={estado}
+        onValueChange={(value) => {
+          setEstado(value as string);
+          updateParams({ estado: value as string });
+        }}
       >
-        <SelectTrigger className="sm:w-44">
+        <SelectTrigger className="w-full sm:w-44">
           <SelectValue placeholder="Estado" />
         </SelectTrigger>
         <SelectContent>

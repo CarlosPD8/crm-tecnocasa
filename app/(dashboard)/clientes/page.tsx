@@ -1,11 +1,12 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { PhoneCall, Plus } from "lucide-react";
 
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
 import { ClienteFiltros } from "@/components/clientes/cliente-filtros";
 import { ClientesTable } from "@/components/clientes/clientes-table";
 import { Pagination } from "@/components/shared/pagination";
+import { PageHeader } from "@/components/shared/page-header";
 import type { Prisma, TipoCliente } from "@/lib/generated/prisma/client";
 
 const PAGE_SIZE = 20;
@@ -50,31 +51,41 @@ export default async function ClientesPage({
   ]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Clientes</h1>
-        <Button
-          nativeButton={false}
-          render={
-            <Link href="/clientes/nuevo">
-              <Plus /> Nuevo cliente
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        eyebrow="Cartera"
+        title="Clientes"
+        description={`${total} ${total === 1 ? "cliente" : "clientes"}${q || tipo || soloPendientes ? " con los filtros actuales" : " registrados"}.`}
+        actions={
+          <Button
+            size="lg"
+            nativeButton={false}
+            render={
+              <Link href="/clientes/nuevo">
+                <Plus /> Nuevo cliente
+              </Link>
+            }
+          />
+        }
+      />
+
+      <div className="flex flex-col gap-4">
+        {soloPendientes && (
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-accent px-4 py-2.5 text-sm text-accent-foreground">
+            <span className="flex items-center gap-2">
+              <PhoneCall className="size-4" />
+              Solo clientes con contacto vencido o para hoy.
+            </span>
+            <Link href="/clientes" className="font-medium underline-offset-4 hover:underline">
+              Quitar filtro
             </Link>
-          }
-        />
+          </div>
+        )}
+
+        <ClienteFiltros defaultQ={q} defaultTipo={tipo} />
+
+        <ClientesTable clientes={clientes} filtrado={Boolean(q || tipo || soloPendientes)} />
       </div>
-
-      {soloPendientes && (
-        <div className="flex items-center justify-between rounded-lg border bg-accent px-3 py-2 text-sm text-accent-foreground">
-          <span>Mostrando solo clientes pendientes de contactar.</span>
-          <Link href="/clientes" className="underline">
-            Quitar filtro
-          </Link>
-        </div>
-      )}
-
-      <ClienteFiltros defaultQ={q} defaultTipo={tipo} />
-
-      <ClientesTable clientes={clientes} />
 
       <Pagination
         basePath="/clientes"

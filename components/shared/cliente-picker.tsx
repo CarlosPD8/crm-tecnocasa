@@ -7,6 +7,8 @@ import { buscarClientes } from "@/lib/actions/clientes";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Initials } from "@/components/shared/item-list";
 
 type ClienteResultado = {
   id: string;
@@ -51,7 +53,7 @@ export function ClientePicker({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex min-w-0 items-center gap-1.5">
       <Popover
         open={open}
         onOpenChange={(next) => {
@@ -69,49 +71,83 @@ export function ClientePicker({
             <Button
               type="button"
               variant="outline"
-              className="w-full justify-start font-normal"
+              className="h-9 w-full min-w-0 justify-start gap-2 px-3 font-normal"
             >
-              <Search className="mr-1 size-4 text-muted-foreground" />
-              {value && valueLabel ? valueLabel : placeholder}
+              {value && valueLabel ? (
+                <>
+                  <Initials nombre={valueLabel} className="size-5 rounded-md text-[0.6rem]" />
+                  <span className="truncate font-medium">{valueLabel}</span>
+                </>
+              ) : (
+                <>
+                  <Search className="size-4 text-muted-foreground" />
+                  <span className="truncate text-muted-foreground">{placeholder}</span>
+                </>
+              )}
             </Button>
           }
         />
-        <PopoverContent className="w-80" align="start">
-          <Input
-            autoFocus
-            placeholder="Nombre, teléfono o email..."
-            value={query}
-            onChange={(e) => handleQueryChange(e.target.value)}
-          />
-          <div className="mt-2 flex max-h-56 flex-col gap-1 overflow-y-auto">
-            {loading && (
-              <p className="p-2 text-xs text-muted-foreground">Buscando...</p>
+        <PopoverContent className="w-80 p-2" align="start">
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              autoFocus
+              aria-label="Buscar cliente"
+              placeholder="Nombre, teléfono o email…"
+              value={query}
+              onChange={(e) => handleQueryChange(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <div className="mt-1.5 flex max-h-64 flex-col gap-0.5 overflow-y-auto">
+            {loading &&
+              [0, 1, 2].map((i) => (
+                <div key={i} className="flex items-center gap-2.5 p-2">
+                  <Skeleton className="size-7 rounded-[30%]" />
+                  <Skeleton className="h-3 flex-1" />
+                </div>
+              ))}
+            {!loading && !query.trim() && (
+              <p className="px-2 py-3 text-xs text-muted-foreground">
+                Escribe para buscar en la cartera.
+              </p>
             )}
             {!loading && query.trim() && resultados.length === 0 && (
-              <p className="p-2 text-xs text-muted-foreground">Sin resultados.</p>
+              <p className="px-2 py-3 text-xs text-muted-foreground">
+                Ningún cliente coincide con «{query.trim()}».
+              </p>
             )}
-            {resultados.map((cliente) => (
-              <button
-                key={cliente.id}
-                type="button"
-                className="rounded-md p-2 text-left text-sm hover:bg-muted"
-                onClick={() => {
-                  onChange({
-                    id: cliente.id,
-                    label: `${cliente.nombre} ${cliente.apellidos}`,
-                  });
-                  setOpen(false);
-                  setQuery("");
-                }}
-              >
-                {cliente.nombre} {cliente.apellidos}
-                {cliente.telefono && (
-                  <span className="ml-1 text-xs text-muted-foreground">
-                    ({cliente.telefono})
+            {!loading &&
+              resultados.map((cliente) => (
+                <button
+                  key={cliente.id}
+                  type="button"
+                  className="flex items-center gap-2.5 rounded-md p-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:outline-none"
+                  onClick={() => {
+                    onChange({
+                      id: cliente.id,
+                      label: `${cliente.nombre} ${cliente.apellidos}`,
+                    });
+                    setOpen(false);
+                    setQuery("");
+                  }}
+                >
+                  <Initials
+                    nombre={`${cliente.nombre} ${cliente.apellidos}`}
+                    className="size-7 text-[0.65rem]"
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">
+                      {cliente.nombre} {cliente.apellidos}
+                    </span>
+                    {cliente.telefono && (
+                      <span className="tabular block text-xs text-muted-foreground">
+                        {cliente.telefono}
+                      </span>
+                    )}
                   </span>
-                )}
-              </button>
-            ))}
+                </button>
+              ))}
           </div>
         </PopoverContent>
       </Popover>

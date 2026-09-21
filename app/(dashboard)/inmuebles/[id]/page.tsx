@@ -19,10 +19,13 @@ import { ArchivoUpload } from "@/components/shared/archivo-upload";
 import { FotosGallery } from "@/components/inmuebles/fotos-gallery";
 import { InteresadosList } from "@/components/inmuebles/interesados-list";
 import { OperacionPanel } from "@/components/inmuebles/operacion-panel";
+import { PageHeader } from "@/components/shared/page-header";
+import { DataItem, DataList } from "@/components/shared/data-list";
+import { EstadoBadge } from "@/components/inmuebles/estado-badge";
+import { TabCount } from "@/components/shared/tab-count";
 import {
   TIPO_INMUEBLE_LABELS,
   TIPO_OPERACION_LABELS,
-  ESTADO_INMUEBLE_LABELS,
 } from "@/lib/validations/inmueble";
 
 const formatoPrecio = new Intl.NumberFormat("es-ES", {
@@ -66,97 +69,109 @@ export default async function InmuebleDetallePage({
     inmueble.estado === "DISPONIBLE" || inmueble.estado === "RESERVADO";
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">{inmueble.referencia}</h1>
-          <p className="text-sm text-muted-foreground">
-            {inmueble.direccion}, {inmueble.localidad}
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          nativeButton={false}
-          render={
-            <Link href={`/inmuebles/${inmueble.id}/editar`}>
-              <Pencil /> Editar
-            </Link>
-          }
-        />
-      </div>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        back={{ href: "/inmuebles", label: "Inmuebles" }}
+        eyebrow={<span className="font-mono tracking-normal normal-case">{inmueble.referencia}</span>}
+        title={inmueble.direccion}
+        description={`${inmueble.localidad} · ${TIPO_INMUEBLE_LABELS[inmueble.tipoInmueble]} · ${TIPO_OPERACION_LABELS[inmueble.tipoOperacion]}`}
+        actions={
+          <Button
+            variant="outline"
+            size="lg"
+            nativeButton={false}
+            render={
+              <Link href={`/inmuebles/${inmueble.id}/editar`}>
+                <Pencil /> Editar
+              </Link>
+            }
+          />
+        }
+      />
 
-      <Tabs defaultValue="datos">
-        <TabsList>
+      <dl className="rise grid grid-cols-2 overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/6 [animation-delay:60ms] sm:grid-cols-4">
+        <div className="col-span-2 flex flex-col gap-2 p-5 sm:col-span-1">
+          <dt className="eyebrow">Precio</dt>
+          <dd className="font-display tabular text-4xl leading-none">
+            {formatoPrecio.format(Number(inmueble.precio))}
+          </dd>
+        </div>
+        <div className="flex flex-col gap-2 border-t border-border/70 p-5 sm:border-t-0 sm:border-l">
+          <dt className="eyebrow">Estado</dt>
+          <dd>
+            <EstadoBadge estado={inmueble.estado} className="text-sm" />
+          </dd>
+        </div>
+        <div className="flex flex-col gap-2 border-t border-l border-border/70 p-5 sm:border-t-0">
+          <dt className="eyebrow">Superficie</dt>
+          <dd className="tabular text-sm font-medium">
+            {inmueble.metrosCuadrados ? `${inmueble.metrosCuadrados} m²` : "—"}
+          </dd>
+        </div>
+        <div className="col-span-2 flex flex-col gap-2 border-t border-border/70 p-5 sm:col-span-1 sm:border-t-0 sm:border-l">
+          <dt className="eyebrow">Hab. / Baños</dt>
+          <dd className="tabular text-sm font-medium">
+            {inmueble.habitaciones ?? "—"} / {inmueble.banos ?? "—"}
+          </dd>
+        </div>
+      </dl>
+
+      <Tabs defaultValue="datos" className="rise [animation-delay:120ms]">
+        <TabsList variant="line" className="mb-4">
           <TabsTrigger value="datos">Datos</TabsTrigger>
-          <TabsTrigger value="fotos">Fotos ({fotos.length})</TabsTrigger>
-          <TabsTrigger value="documentos">Documentos ({documentos.length})</TabsTrigger>
-          <TabsTrigger value="interesados">
-            Interesados ({inmueble.intereses.length})
+          <TabsTrigger value="fotos">
+            Fotos <TabCount n={fotos.length} />
           </TabsTrigger>
-          <TabsTrigger value="operacion">Operación</TabsTrigger>
+          <TabsTrigger value="documentos">
+            Documentos <TabCount n={documentos.length} />
+          </TabsTrigger>
+          <TabsTrigger value="interesados">
+            Interesados <TabCount n={inmueble.intereses.length} />
+          </TabsTrigger>
+          <TabsTrigger value="operacion">
+            Operación <TabCount n={inmueble.operaciones.length} />
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="datos">
           <Card>
-            <CardContent className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <p className="text-xs text-muted-foreground">Tipo</p>
-                <Badge variant="secondary">
-                  {TIPO_INMUEBLE_LABELS[inmueble.tipoInmueble]}
-                </Badge>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Operación</p>
-                <p className="text-sm">{TIPO_OPERACION_LABELS[inmueble.tipoOperacion]}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Precio</p>
-                <p className="text-sm">{formatoPrecio.format(Number(inmueble.precio))}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Estado</p>
-                <Badge>{ESTADO_INMUEBLE_LABELS[inmueble.estado]}</Badge>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Metros cuadrados</p>
-                <p className="text-sm">{inmueble.metrosCuadrados ?? "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Habitaciones / Baños</p>
-                <p className="text-sm">
-                  {inmueble.habitaciones ?? "—"} / {inmueble.banos ?? "—"}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Propietario</p>
-                <p className="text-sm">
+            <CardContent>
+              <DataList className="lg:grid-cols-3">
+                <DataItem label="Tipo">
+                  <Badge variant="secondary">{TIPO_INMUEBLE_LABELS[inmueble.tipoInmueble]}</Badge>
+                </DataItem>
+                <DataItem label="Operación">
+                  {TIPO_OPERACION_LABELS[inmueble.tipoOperacion]}
+                </DataItem>
+                <DataItem label="Propietario">
                   {inmueble.propietario ? (
                     <Link
                       href={`/clientes/${inmueble.propietario.id}`}
-                      className="hover:underline"
+                      className="font-medium text-primary underline-offset-4 hover:underline"
                     >
                       {inmueble.propietario.nombre} {inmueble.propietario.apellidos}
                     </Link>
                   ) : (
                     "—"
                   )}
-                </p>
-              </div>
-              <div className="sm:col-span-2">
-                <p className="text-xs text-muted-foreground">Descripción</p>
-                <p className="whitespace-pre-wrap text-sm">
-                  {inmueble.descripcion ?? "—"}
-                </p>
-              </div>
+                </DataItem>
+                <DataItem label="Descripción" className="sm:col-span-2 lg:col-span-3">
+                  <p className="max-w-[70ch] whitespace-pre-wrap leading-relaxed">
+                    {inmueble.descripcion ?? "—"}
+                  </p>
+                </DataItem>
+              </DataList>
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="fotos">
           <Card>
-            <CardContent className="flex flex-col gap-4">
+            <CardContent className="flex flex-col gap-5">
               <ArchivoUpload
                 label="Subir foto"
+                accept="image/*"
+                hint="JPG, PNG o WebP. Reordénalas con las flechas; la primera es la portada."
                 onUpload={subirArchivoInmueble.bind(null, inmueble.id, "FOTO")}
               />
               <FotosGallery
@@ -172,8 +187,9 @@ export default async function InmuebleDetallePage({
 
         <TabsContent value="documentos">
           <Card>
-            <CardContent className="flex flex-col gap-4">
+            <CardContent className="flex flex-col gap-5">
               <ArchivoUpload
+                hint="Nota simple, certificado energético, planos, contrato de encargo…"
                 onUpload={subirArchivoInmueble.bind(null, inmueble.id, "DOCUMENTO")}
               />
               <ArchivosList archivos={documentosConUrl} />

@@ -16,7 +16,6 @@ import {
 } from "@/lib/validations/inmueble";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -25,8 +24,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent } from "@/components/ui/card";
 import { ClientePicker } from "@/components/shared/cliente-picker";
+import {
+  AffixInput,
+  Field,
+  FormActions,
+  FormSection,
+  FormShell,
+  Segmented,
+} from "@/components/shared/form";
 import type { Inmueble } from "@/lib/generated/prisma/client";
 
 // `precio` es un Decimal de Prisma, no serializable al cruzar de Server a
@@ -93,149 +99,153 @@ export function InmuebleForm({
   }
 
   return (
-    <Card className="max-w-3xl">
-      <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="referencia">Referencia</Label>
-              <Input id="referencia" {...register("referencia")} />
-              {errors.referencia && (
-                <p className="text-sm text-destructive">{errors.referencia.message}</p>
-              )}
-            </div>
+    <FormShell onSubmit={handleSubmit(onSubmit)} noValidate className="max-w-4xl">
+      <FormSection title="Ubicación" description="La referencia es el código interno con el que se busca el inmueble.">
+        <Field label="Referencia" htmlFor="referencia" error={errors.referencia?.message}>
+          <Input
+            id="referencia"
+            autoComplete="off"
+            className="font-mono"
+            aria-invalid={!!errors.referencia}
+            aria-describedby={errors.referencia ? "referencia-error" : undefined}
+            {...register("referencia")}
+          />
+        </Field>
+        <Field label="Localidad" htmlFor="localidad" error={errors.localidad?.message}>
+          <Input
+            id="localidad"
+            aria-invalid={!!errors.localidad}
+            aria-describedby={errors.localidad ? "localidad-error" : undefined}
+            {...register("localidad")}
+          />
+        </Field>
+        <Field label="Dirección" htmlFor="direccion" error={errors.direccion?.message} className="sm:col-span-2">
+          <Input
+            id="direccion"
+            placeholder="Calle, número, piso y puerta"
+            aria-invalid={!!errors.direccion}
+            aria-describedby={errors.direccion ? "direccion-error" : undefined}
+            {...register("direccion")}
+          />
+        </Field>
+      </FormSection>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="localidad">Localidad</Label>
-              <Input id="localidad" {...register("localidad")} />
-              {errors.localidad && (
-                <p className="text-sm text-destructive">{errors.localidad.message}</p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2 sm:col-span-2">
-              <Label htmlFor="direccion">Dirección</Label>
-              <Input id="direccion" {...register("direccion")} />
-              {errors.direccion && (
-                <p className="text-sm text-destructive">{errors.direccion.message}</p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label>Tipo de inmueble</Label>
-              <Controller
-                control={control}
-                name="tipoInmueble"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(TIPO_INMUEBLE_LABELS).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label>Venta o alquiler</Label>
-              <Controller
-                control={control}
+      <FormSection title="Comercialización" description="Tipo de operación, precio de salida y situación actual.">
+        <Field label="Operación">
+          <Controller
+            control={control}
+            name="tipoOperacion"
+            render={({ field }) => (
+              <Segmented
                 name="tipoOperacion"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(TIPO_OPERACION_LABELS).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
+                aria-label="Venta o alquiler"
+                value={field.value}
+                onChange={field.onChange}
+                options={TIPO_OPERACION_LABELS}
               />
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="precio">Precio (€)</Label>
-              <Input id="precio" type="number" step="0.01" min="0" {...register("precio")} />
-              {errors.precio && (
-                <p className="text-sm text-destructive">{errors.precio.message}</p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <Label>Estado</Label>
-              <Controller
-                control={control}
+            )}
+          />
+        </Field>
+        <Field
+          label="Precio"
+          htmlFor="precio"
+          error={errors.precio?.message}
+        >
+          <AffixInput
+            id="precio"
+            type="number"
+            step="0.01"
+            min="0"
+            inputMode="decimal"
+            suffix="€"
+            aria-invalid={!!errors.precio}
+            aria-describedby={errors.precio ? "precio-error" : undefined}
+            {...register("precio")}
+          />
+        </Field>
+        <Field label="Estado" className="sm:col-span-2">
+          <Controller
+            control={control}
+            name="estado"
+            render={({ field }) => (
+              <Segmented
                 name="estado"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(ESTADO_INMUEBLE_LABELS).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
+                aria-label="Estado"
+                value={field.value}
+                onChange={field.onChange}
+                options={ESTADO_INMUEBLE_LABELS}
               />
-            </div>
+            )}
+          />
+        </Field>
+      </FormSection>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="metrosCuadrados">Metros cuadrados</Label>
-              <Input id="metrosCuadrados" type="number" min="0" {...register("metrosCuadrados")} />
-            </div>
+      <FormSection title="Características">
+        <Field label="Tipo de inmueble">
+          <Controller
+            control={control}
+            name="tipoInmueble"
+            render={({ field }) => (
+              <Select items={TIPO_INMUEBLE_LABELS} value={field.value} onValueChange={field.onChange}>
+                <SelectTrigger className="w-full" aria-label="Tipo de inmueble">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TIPO_INMUEBLE_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
+        </Field>
+        <Field label="Superficie" htmlFor="metrosCuadrados" optional>
+          <AffixInput
+            id="metrosCuadrados"
+            type="number"
+            min="0"
+            inputMode="numeric"
+            suffix="m²"
+            {...register("metrosCuadrados")}
+          />
+        </Field>
+        <Field label="Habitaciones" htmlFor="habitaciones" optional>
+          <Input id="habitaciones" type="number" min="0" inputMode="numeric" className="tabular" {...register("habitaciones")} />
+        </Field>
+        <Field label="Baños" htmlFor="banos" optional>
+          <Input id="banos" type="number" min="0" inputMode="numeric" className="tabular" {...register("banos")} />
+        </Field>
+        <Field label="Descripción" htmlFor="descripcion" optional className="sm:col-span-2">
+          <Textarea
+            id="descripcion"
+            rows={5}
+            placeholder="Orientación, estado de conservación, extras, comunidad…"
+            {...register("descripcion")}
+          />
+        </Field>
+      </FormSection>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="habitaciones">Habitaciones</Label>
-              <Input id="habitaciones" type="number" min="0" {...register("habitaciones")} />
-            </div>
+      <FormSection title="Propietario" description="Cliente de la cartera que ha encargado la venta o el alquiler.">
+        <Field label="Cliente propietario" optional className="sm:col-span-2">
+          <ClientePicker
+            value={propietario?.id ?? null}
+            valueLabel={propietario?.label}
+            onChange={setPropietario}
+            placeholder="Buscar en clientes…"
+          />
+        </Field>
+      </FormSection>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="banos">Baños</Label>
-              <Input id="banos" type="number" min="0" {...register("banos")} />
-            </div>
-
-            <div className="flex flex-col gap-2 sm:col-span-2">
-              <Label>Propietario</Label>
-              <ClientePicker
-                value={propietario?.id ?? null}
-                valueLabel={propietario?.label}
-                onChange={setPropietario}
-                placeholder="Sin propietario asignado"
-              />
-            </div>
-
-            <div className="flex flex-col gap-2 sm:col-span-2">
-              <Label htmlFor="descripcion">Descripción</Label>
-              <Textarea id="descripcion" rows={4} {...register("descripcion")} />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => router.back()}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Guardando..." : "Guardar"}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+      <FormActions>
+        <Button type="button" variant="ghost" onClick={() => router.back()}>
+          Cancelar
+        </Button>
+        <Button type="submit" size="lg" disabled={isSubmitting}>
+          {isSubmitting ? "Guardando…" : inmueble ? "Guardar cambios" : "Crear inmueble"}
+        </Button>
+      </FormActions>
+    </FormShell>
   );
 }

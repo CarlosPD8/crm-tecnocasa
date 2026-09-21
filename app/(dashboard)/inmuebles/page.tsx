@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { InmuebleFiltros } from "@/components/inmuebles/inmueble-filtros";
 import { InmueblesTable } from "@/components/inmuebles/inmuebles-table";
 import { Pagination } from "@/components/shared/pagination";
+import { PageHeader } from "@/components/shared/page-header";
 import type { Prisma, TipoOperacion, EstadoInmueble } from "@/lib/generated/prisma/client";
 
 const PAGE_SIZE = 20;
@@ -43,22 +44,32 @@ export default async function InmueblesPage({
   ]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Inmuebles</h1>
-        <Button
-          nativeButton={false}
-          render={
-            <Link href="/inmuebles/nuevo">
-              <Plus /> Nuevo inmueble
-            </Link>
-          }
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        eyebrow="Cartera"
+        title="Inmuebles"
+        description={`${total} ${total === 1 ? "inmueble" : "inmuebles"}${q || tipoOperacion || estado ? " con los filtros actuales" : " en cartera"}.`}
+        actions={
+          <Button
+            size="lg"
+            nativeButton={false}
+            render={
+              <Link href="/inmuebles/nuevo">
+                <Plus /> Nuevo inmueble
+              </Link>
+            }
+          />
+        }
+      />
+
+      <div className="flex flex-col gap-4">
+        <InmuebleFiltros defaultQ={q} defaultTipoOperacion={tipoOperacion} defaultEstado={estado} />
+
+        <InmueblesTable
+          inmuebles={inmuebles}
+          filtrado={Boolean(q || tipoOperacion || estado)}
         />
       </div>
-
-      <InmuebleFiltros defaultQ={q} defaultTipoOperacion={tipoOperacion} defaultEstado={estado} />
-
-      <InmueblesTable inmuebles={inmuebles} />
 
       <Pagination
         basePath="/inmuebles"

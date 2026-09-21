@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { InmuebleForm } from "@/components/inmuebles/inmueble-form";
+import { PageHeader } from "@/components/shared/page-header";
 
 export default async function EditarInmueblePage({
   params,
@@ -16,8 +17,12 @@ export default async function EditarInmueblePage({
   if (!inmueble) notFound();
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Editar inmueble: {inmueble.referencia}</h1>
+    <div className="flex flex-col gap-8">
+      <PageHeader
+        back={{ href: `/inmuebles/${inmueble.id}`, label: "Volver a la ficha" }}
+        eyebrow={<span className="font-mono tracking-normal normal-case">{inmueble.referencia}</span>}
+        title={inmueble.direccion}
+      />
       <InmuebleForm
         inmueble={{ ...inmueble, precio: inmueble.precio.toString() }}
         propietarioInicial={

@@ -3,17 +3,19 @@
 import { useTransition } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, ImageOff, Trash2 } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { moverFoto, eliminarArchivo } from "@/lib/actions/archivos";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 
 export type FotoInmueble = {
   id: string;
   url: string;
   nombreOriginal: string;
 };
+
+const botonFoto =
+  "grid size-7 place-items-center rounded-md bg-card/90 text-foreground shadow-soft backdrop-blur-sm transition-[background-color,transform,opacity] duration-200 hover:bg-card active:scale-95 disabled:pointer-events-none disabled:opacity-40 focus-visible:ring-3 focus-visible:ring-ring/40 focus-visible:outline-none [&_svg]:size-3.5";
 
 export function FotosGallery({ fotos }: { fotos: FotoInmueble[] }) {
   const [isPending, startTransition] = useTransition();
@@ -38,64 +40,79 @@ export function FotosGallery({ fotos }: { fotos: FotoInmueble[] }) {
 
   if (fotos.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        Todavía no hay fotos de este inmueble.
-      </p>
+      <div className="flex flex-col items-center gap-2 py-8 text-center">
+        <ImageOff className="size-5 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">
+          Sin fotos todavía. La primera que subas será la portada.
+        </p>
+      </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+    <ul
+      className={cn(
+        "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4",
+        isPending && "opacity-70 transition-opacity"
+      )}
+    >
       {fotos.map((foto, index) => (
-        <div key={foto.id} className="flex flex-col gap-1 rounded-lg border p-2">
-          <div className="relative aspect-square w-full overflow-hidden rounded-md bg-muted">
-            <Image
-              src={foto.url}
-              alt={foto.nombreOriginal}
-              fill
-              sizes="(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
-              className="object-cover"
-            />
-            {index === 0 && (
-              <Badge className="absolute left-1 top-1">Portada</Badge>
-            )}
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="flex">
-              <Button
+        <li
+          key={foto.id}
+          className={cn(
+            "group relative overflow-hidden rounded-xl bg-muted ring-1 ring-foreground/6",
+            index === 0 ? "col-span-2 aspect-4/3 sm:row-span-2 sm:aspect-square" : "aspect-square"
+          )}
+        >
+          <Image
+            src={foto.url}
+            alt={foto.nombreOriginal}
+            fill
+            sizes={
+              index === 0
+                ? "(min-width: 1024px) 50vw, 100vw"
+                : "(min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
+            }
+            className="object-cover transition-transform duration-500 ease-out-soft group-hover:scale-[1.03]"
+          />
+          {index === 0 && (
+            <span className="absolute top-2.5 left-2.5 rounded-md bg-card/90 px-2 py-0.5 text-xs font-medium shadow-soft backdrop-blur-sm">
+              Portada
+            </span>
+          )}
+          <div className="absolute inset-x-2 bottom-2 flex items-center justify-between opacity-100 transition-opacity duration-200 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
+            <div className="flex gap-1">
+              <button
                 type="button"
-                variant="ghost"
-                size="icon-xs"
-                aria-label="Mover a la izquierda"
+                className={botonFoto}
+                aria-label="Mover antes"
                 disabled={isPending || index === 0}
                 onClick={() => mover(foto.id, "arriba")}
               >
                 <ChevronLeft />
-              </Button>
-              <Button
+              </button>
+              <button
                 type="button"
-                variant="ghost"
-                size="icon-xs"
-                aria-label="Mover a la derecha"
+                className={botonFoto}
+                aria-label="Mover después"
                 disabled={isPending || index === fotos.length - 1}
                 onClick={() => mover(foto.id, "abajo")}
               >
                 <ChevronRight />
-              </Button>
+              </button>
             </div>
-            <Button
+            <button
               type="button"
-              variant="ghost"
-              size="icon-xs"
-              aria-label="Eliminar foto"
+              className={cn(botonFoto, "hover:text-destructive")}
+              aria-label={`Eliminar foto ${foto.nombreOriginal}`}
               disabled={isPending}
               onClick={() => eliminar(foto.id)}
             >
               <Trash2 />
-            </Button>
+            </button>
           </div>
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }

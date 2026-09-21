@@ -10,13 +10,6 @@ import { loginSchema, type LoginInput } from "@/lib/validations/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 
 export function LoginForm() {
   const router = useRouter();
@@ -44,25 +37,18 @@ export function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle>Acceso de agentes</CardTitle>
-        <CardDescription>
-          Introduce tus credenciales para entrar al CRM.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          onSubmit={handleSubmit(onSubmit)}
-          className="flex flex-col gap-4"
-          noValidate
-        >
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      className="flex flex-col gap-5"
+      noValidate
+    >
           <div className="flex flex-col gap-2">
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
               type="email"
               autoComplete="email"
+              className="h-10"
               {...register("email")}
             />
             {errors.email && (
@@ -78,6 +64,7 @@ export function LoginForm() {
               id="password"
               type="password"
               autoComplete="current-password"
+              className="h-10"
               {...register("password")}
             />
             {errors.password && (
@@ -88,14 +75,17 @@ export function LoginForm() {
           </div>
 
           {authError && (
-            <p className="text-sm text-destructive">{authError}</p>
+            <p
+              role="alert"
+              className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {authError}
+            </p>
           )}
 
-          <Button type="submit" disabled={isSubmitting} className="mt-2">
-            {isSubmitting ? "Entrando..." : "Entrar"}
+          <Button type="submit" size="lg" disabled={isSubmitting} className="mt-1 w-full">
+            {isSubmitting ? "Entrando…" : "Entrar"}
           </Button>
-        </form>
-      </CardContent>
-    </Card>
+    </form>
   );
 }

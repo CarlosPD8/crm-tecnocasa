@@ -1,8 +1,20 @@
+import Link from "next/link";
 import { format } from "date-fns";
+import { ArrowUpRight } from "lucide-react";
+
+import { ItemList, ItemRow, ListHeading } from "@/components/shared/item-list";
+import { EstadoBadge } from "@/components/inmuebles/estado-badge";
+import { TIPO_OPERACION_LABELS } from "@/lib/validations/inmueble";
 import type { Interes, Operacion, Inmueble } from "@/lib/generated/prisma/client";
 
 type InteresConInmueble = Interes & { inmueble: Inmueble };
 type OperacionConInmueble = Operacion & { inmueble: Inmueble };
+
+const formatoPrecio = new Intl.NumberFormat("es-ES", {
+  style: "currency",
+  currency: "EUR",
+  maximumFractionDigits: 0,
+});
 
 export function InteresesList({
   intereses,
@@ -12,43 +24,77 @@ export function InteresesList({
   operaciones: OperacionConInmueble[];
 }) {
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h3 className="mb-2 text-sm font-medium">Inmuebles de interés</h3>
+    <div className="grid gap-8 lg:grid-cols-2">
+      <section className="flex flex-col gap-3">
+        <ListHeading title="Inmuebles de interés" count={intereses.length} />
         {intereses.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No hay inmuebles marcados como de interés. Esto se gestiona desde
-            la ficha del inmueble.
+          <p className="rounded-xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
+            Ningún inmueble marcado todavía. El interés se añade desde la pestaña
+            «Interesados» de cada inmueble.
           </p>
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ItemList>
             {intereses.map((interes) => (
-              <li key={interes.id} className="rounded-lg border p-2 text-sm">
-                {interes.inmueble.referencia} — {interes.inmueble.direccion}
-              </li>
+              <ItemRow key={interes.id} className="p-0">
+                <Link
+                  href={`/inmuebles/${interes.inmuebleId}`}
+                  className="flex min-w-0 flex-1 items-center gap-3.5 px-4 py-3"
+                >
+                  <span className="w-16 shrink-0 font-mono text-xs text-muted-foreground">
+                    {interes.inmueble.referencia}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{interes.inmueble.direccion}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {interes.inmueble.localidad} · desde {format(interes.fecha, "dd/MM/yyyy")}
+                    </span>
+                  </span>
+                  <EstadoBadge estado={interes.inmueble.estado} className="shrink-0" />
+                  <ArrowUpRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/item:opacity-100" />
+                </Link>
+              </ItemRow>
             ))}
-          </ul>
+          </ItemList>
         )}
-      </div>
+      </section>
 
-      <div>
-        <h3 className="mb-2 text-sm font-medium">Operaciones cerradas</h3>
+      <section className="flex flex-col gap-3">
+        <ListHeading title="Operaciones cerradas" count={operaciones.length} />
         {operaciones.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
+          <p className="rounded-xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
             No hay operaciones cerradas con este cliente.
           </p>
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ItemList>
             {operaciones.map((operacion) => (
-              <li key={operacion.id} className="rounded-lg border p-2 text-sm">
-                {operacion.inmueble.referencia} — {operacion.tipoOperacion} —{" "}
-                {format(operacion.fecha, "dd/MM/yyyy")} —{" "}
-                {operacion.precioFinal.toString()} €
-              </li>
+              <ItemRow key={operacion.id} className="p-0">
+                <Link
+                  href={`/inmuebles/${operacion.inmuebleId}`}
+                  className="flex min-w-0 flex-1 items-center gap-3.5 px-4 py-3"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">
+                      {TIPO_OPERACION_LABELS[operacion.tipoOperacion]} ·{" "}
+                      <span className="font-mono text-xs">{operacion.inmueble.referencia}</span>
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {operacion.inmueble.direccion}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="tabular block font-medium">
+                      {formatoPrecio.format(Number(operacion.precioFinal))}
+                    </span>
+                    <span className="tabular block text-xs text-muted-foreground">
+                      {format(operacion.fecha, "dd/MM/yyyy")}
+                    </span>
+                  </span>
+                </Link>
+              </ItemRow>
             ))}
-          </ul>
+          </ItemList>
         )}
-      </div>
+      </section>
     </div>
   );
 }

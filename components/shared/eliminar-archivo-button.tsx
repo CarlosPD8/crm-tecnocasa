@@ -28,6 +28,7 @@ export function EliminarArchivoButton({ archivoId }: { archivoId: string }) {
       aria-label="Eliminar archivo"
       disabled={isPending}
       onClick={handleDelete}
+      className="text-muted-foreground opacity-60 group-hover/item:opacity-100 hover:text-destructive focus-visible:opacity-100"
     >
       <Trash2 />
     </Button>
