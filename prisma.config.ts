@@ -8,6 +8,8 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
+    // Datos de demostración (borra y recrea todo): npx prisma db seed
+    seed: "tsx prisma/seed.ts",
   },
   // El CLI (migrate, db push, introspect...) usa la conexión DIRECTA, sin
   // pooler: las migraciones necesitan bloqueos de advisory lock y DDL que no

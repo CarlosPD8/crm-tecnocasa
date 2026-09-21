@@ -32,16 +32,18 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublicPath = PUBLIC_PATHS.includes(pathname);
 
+  // 303 so a POST (logout, form submit with an expired session) is followed with
+  // a GET; the default 307 would replay the POST and pages answer 405.
   if (!user && !isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(url, 303);
   }
 
   if (user && isPublicPath) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
-    return NextResponse.redirect(url);
+    return NextResponse.redirect(url, 303);
   }
 
   return response;
