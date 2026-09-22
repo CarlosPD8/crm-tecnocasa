@@ -9,7 +9,7 @@ import {
 
 export const FILTROS_CLIENTES = {
   campos: [
-    { clave: "tipo", etiqueta: "Tipo de cliente", grupo: "Perfil", tipo: "multi", opciones: TIPO_CLIENTE_LABELS },
+    { clave: "tipo", etiqueta: "Etiquetas", grupo: "Perfil", tipo: "multi", opciones: TIPO_CLIENTE_LABELS },
     { clave: "interes", etiqueta: "Interesado en", grupo: "Perfil", tipo: "multi", opciones: TIPO_OPERACION_LABELS },
     { clave: "propietario", etiqueta: "Tiene inmuebles en propiedad", grupo: "Perfil", tipo: "bool" },
     { clave: "operaciones", etiqueta: "Ha cerrado operaciones", grupo: "Perfil", tipo: "bool" },

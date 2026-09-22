@@ -128,7 +128,7 @@ const CLIENTES: ClienteSeed[] = [
     key: "antonio",
     nombre: "Antonio",
     apellidos: "Gallardo Pérez",
-    tipo: "VENDEDOR",
+    tipo: "PROPIETARIO",
     telefono: "699 551 380",
     email: "a.gallardo@example.com",
     direccion: "Camino de Ronda 112, 5ºC, Granada",
@@ -183,7 +183,7 @@ const CLIENTES: ClienteSeed[] = [
     key: "francisco",
     nombre: "Francisco",
     apellidos: "Romero Aguilar",
-    tipo: "VENDEDOR",
+    tipo: "PROPIETARIO",
     telefono: "640 377 821",
     email: "fromero@example.com",
     notas: "Vende nave en el polígono de Almanjáyar. Precio negociable para venta rápida.",
@@ -252,7 +252,7 @@ const CLIENTES: ClienteSeed[] = [
     key: "jose",
     nombre: "José Luis",
     apellidos: "Castro Marín",
-    tipo: "VENDEDOR",
+    tipo: "PROPIETARIO",
     telefono: "652 903 117",
     direccion: "C/ Poeta Manuel de Góngora 6, Granada",
     notas: "Vende parcela en el Camino de Purchil. Herencia de tres hermanos: firma él en su nombre.",
@@ -306,7 +306,7 @@ const CLIENTES: ClienteSeed[] = [
     key: "nuria",
     nombre: "Nuria",
     apellidos: "Lozano Gil",
-    tipo: "VENDEDOR",
+    tipo: "PROPIETARIO",
     telefono: "645 520 816",
     email: "nuria.lozano@example.com",
     notas: "Vende carmen en el Albaicín que necesita reforma. Acepta ofertas.",
@@ -503,6 +503,7 @@ async function main() {
         nombre: c.nombre,
         apellidos: c.apellidos,
         dni: DNIS[c.key] ? conLetra(DNIS[c.key]) : null,
+        tipos: [c.tipo],
         tipoCliente: c.tipo,
         telefono: c.telefono ?? null,
         email: c.email ?? null,
@@ -543,6 +544,12 @@ async function main() {
     });
     inmuebleId.set(inm.ref, creado.id);
   }
+
+  // Como en la app: quien tiene inmuebles asignados lleva la etiqueta «Propietario».
+  await prisma.cliente.updateMany({
+    where: { inmueblesEnPropiedad: { some: {} }, NOT: { tipos: { has: "PROPIETARIO" } } },
+    data: { tipos: { push: "PROPIETARIO" } },
+  });
 
   console.log("Creando contactos…");
   const contactos = [

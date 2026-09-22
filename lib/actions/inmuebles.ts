@@ -38,6 +38,17 @@ function buildData(data: InmuebleInput) {
   };
 }
 
+/** Assigning a property as owner tags the client as «Propietario». */
+async function marcarPropietario(clienteId: string | null) {
+  if (!clienteId) return;
+  const { count } = await prisma.cliente.updateMany({
+    where: { id: clienteId, NOT: { tipos: { has: "PROPIETARIO" } } },
+    data: { tipos: { push: "PROPIETARIO" } },
+  });
+  revalidatePath(`/clientes/${clienteId}`);
+  if (count) revalidatePath("/clientes");
+}
+
 function revalidarBloque(bloqueId: string | null) {
   if (bloqueId) revalidatePath(`/bloques/${bloqueId}`);
   revalidatePath("/bloques");
@@ -62,6 +73,7 @@ export async function crearInmueble(data: InmuebleInput) {
   }
 
   const inmueble = await prisma.inmueble.create({ data: buildData(parsed.data) });
+  await marcarPropietario(inmueble.propietarioId);
 
   revalidatePath("/inmuebles");
   revalidarBloque(inmueble.bloqueId);
@@ -91,6 +103,7 @@ export async function actualizarInmueble(id: string, data: InmuebleInput) {
     where: { id },
     data: buildData(parsed.data),
   });
+  await marcarPropietario(actualizado.propietarioId);
 
   revalidatePath("/inmuebles");
   revalidatePath(`/inmuebles/${id}`);

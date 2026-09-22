@@ -10,11 +10,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ENLACE_FILA, FILA_CLICABLE } from "@/components/shared/row-link";
-import { TIPO_CLIENTE_LABELS } from "@/lib/validations/cliente";
+import { EtiquetasCliente } from "@/components/clientes/etiquetas-cliente";
 import { cn } from "@/lib/utils";
 import type { Cliente } from "@/lib/generated/prisma/client";
 
@@ -84,7 +83,7 @@ export function ClientesTable({
                 </Link>
               </TableCell>
               <TableCell>
-                <Badge variant="secondary">{TIPO_CLIENTE_LABELS[cliente.tipoCliente]}</Badge>
+                <EtiquetasCliente tipos={cliente.tipos} />
               </TableCell>
               <TableCell className="text-muted-foreground">{cliente.telefono ?? "—"}</TableCell>
               <TableCell className="text-muted-foreground">{cliente.email ?? "—"}</TableCell>

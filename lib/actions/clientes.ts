@@ -3,10 +3,19 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth/require-session";
-import { clienteSchema, normalizarDni, type ClienteInput } from "@/lib/validations/cliente";
+import { clienteSchema, normalizarDni, ordenarEtiquetas, type ClienteInput } from "@/lib/validations/cliente";
 
 function toNullable(value: string | undefined) {
   return value && value.trim() !== "" ? value : null;
+}
+
+/**
+ * Tags in display order. The legacy single-type column mirrors the first tag
+ * until the deployed version stops reading it.
+ */
+function etiquetas(tipos: ClienteInput["tipos"]) {
+  const ordenadas = ordenarEtiquetas(tipos);
+  return { tipos: ordenadas, tipoCliente: ordenadas[0] };
 }
 
 /** Normalized DNI, or an error if another client already has it. */
@@ -43,7 +52,7 @@ export async function crearCliente(data: ClienteInput) {
       telefono: toNullable(parsed.data.telefono),
       email: toNullable(parsed.data.email),
       direccion: toNullable(parsed.data.direccion),
-      tipoCliente: parsed.data.tipoCliente,
+      ...etiquetas(parsed.data.tipos),
       notas: toNullable(parsed.data.notas),
       fechaProximoContacto: parsed.data.fechaProximoContacto
         ? new Date(parsed.data.fechaProximoContacto)
@@ -73,7 +82,7 @@ export async function actualizarCliente(id: string, data: ClienteInput) {
       telefono: toNullable(parsed.data.telefono),
       email: toNullable(parsed.data.email),
       direccion: toNullable(parsed.data.direccion),
-      tipoCliente: parsed.data.tipoCliente,
+      ...etiquetas(parsed.data.tipos),
       notas: toNullable(parsed.data.notas),
       fechaProximoContacto: parsed.data.fechaProximoContacto
         ? new Date(parsed.data.fechaProximoContacto)

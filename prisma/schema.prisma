@@ -114,6 +114,10 @@ model Cliente {
   telefono             String?
   email                String?
   direccion            String?
+  // Etiquetas del cliente: puede ser a la vez comprador, inquilino y propietario.
+  tipos                TipoCliente[] @default([])
+  // Obsoleto: sustituido por `tipos`. Se mantiene (igual a la primera etiqueta)
+  // solo mientras la versión desplegada lo lea; se elimina tras el despliegue.
   tipoCliente          TipoCliente
   notas                String?
   fechaUltimoContacto  DateTime?
@@ -133,6 +137,7 @@ model Cliente {
   @@index([telefono])
   @@index([email])
   @@index([tipoCliente])
+  @@index([tipos], type: Gin)
   @@index([fechaProximoContacto])
 }
 

@@ -8,8 +8,10 @@ import { toast } from "sonner";
 import { crearCliente, actualizarCliente } from "@/lib/actions/clientes";
 import {
   clienteSchema,
+  ordenarEtiquetas,
   TIPO_CLIENTE_LABELS,
   type ClienteInput,
+  type EtiquetaCliente,
 } from "@/lib/validations/cliente";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +21,6 @@ import {
   FormActions,
   FormSection,
   FormShell,
-  Segmented,
 } from "@/components/shared/form";
 import type { Cliente } from "@/lib/generated/prisma/client";
 
@@ -46,12 +47,12 @@ export function ClienteForm({ cliente }: { cliente?: Cliente }) {
           telefono: cliente.telefono ?? "",
           email: cliente.email ?? "",
           direccion: cliente.direccion ?? "",
-          tipoCliente: cliente.tipoCliente,
+          tipos: ordenarEtiquetas(cliente.tipos),
           notas: cliente.notas ?? "",
           fechaProximoContacto: toDateInputValue(cliente.fechaProximoContacto),
         }
       : {
-          tipoCliente: "COMPRADOR",
+          tipos: ["COMPRADOR"],
         },
   });
 
@@ -106,18 +107,17 @@ export function ClienteForm({ cliente }: { cliente?: Cliente }) {
             {...register("dni")}
           />
         </Field>
-        <Field label="Tipo de cliente" className="sm:col-span-2">
+        <Field
+          label="Etiquetas"
+          className="sm:col-span-2"
+          error={errors.tipos?.message}
+          hint="Marca todas las que apliquen. «Propietario» se añade sola al asignarle un inmueble."
+        >
           <Controller
             control={control}
-            name="tipoCliente"
+            name="tipos"
             render={({ field }) => (
-              <Segmented
-                name="tipoCliente"
-                aria-label="Tipo de cliente"
-                value={field.value}
-                onChange={field.onChange}
-                options={TIPO_CLIENTE_LABELS}
-              />
+              <SelectorEtiquetas value={field.value ?? []} onChange={field.onChange} />
             )}
           />
         </Field>
@@ -170,5 +170,37 @@ export function ClienteForm({ cliente }: { cliente?: Cliente }) {
         </Button>
       </FormActions>
     </FormShell>
+  );
+}
+
+function SelectorEtiquetas({
+  value,
+  onChange,
+}: {
+  value: EtiquetaCliente[];
+  onChange: (tipos: EtiquetaCliente[]) => void;
+}) {
+  return (
+    <div role="group" aria-label="Etiquetas" className="flex flex-wrap gap-2">
+      {(Object.entries(TIPO_CLIENTE_LABELS) as [EtiquetaCliente, string][]).map(([etiqueta, texto]) => {
+        const marcada = value.includes(etiqueta);
+        return (
+          <label
+            key={etiqueta}
+            className="relative flex cursor-pointer items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm font-medium text-muted-foreground transition-[background-color,color,border-color,box-shadow] duration-200 hover:text-foreground has-checked:border-primary/40 has-checked:bg-accent has-checked:text-accent-foreground has-focus-visible:ring-3 has-focus-visible:ring-ring/40"
+          >
+            <input
+              type="checkbox"
+              checked={marcada}
+              onChange={() =>
+                onChange(ordenarEtiquetas(marcada ? value.filter((v) => v !== etiqueta) : [...value, etiqueta]))
+              }
+              className="size-4 accent-primary"
+            />
+            {texto}
+          </label>
+        );
+      })}
+    </div>
   );
 }

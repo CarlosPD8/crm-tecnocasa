@@ -1,5 +1,24 @@
 import { z } from "zod";
-import { TipoCliente } from "@/lib/generated/prisma/enums";
+
+/**
+ * Client tags; a client can carry several. «Vendedor» is gone: an owner whose
+ * property is for sale is the seller. The legacy "VENDEDOR" enum value stays in
+ * the database until the contract migration and is never offered.
+ */
+export const TIPO_CLIENTE_LABELS = {
+  COMPRADOR: "Comprador",
+  INQUILINO: "Inquilino",
+  PROPIETARIO: "Propietario",
+} as const;
+
+export type EtiquetaCliente = keyof typeof TIPO_CLIENTE_LABELS;
+
+const ETIQUETAS = Object.keys(TIPO_CLIENTE_LABELS) as [EtiquetaCliente, ...EtiquetaCliente[]];
+
+/** Known tags in display order (drops legacy values). */
+export function ordenarEtiquetas(tipos: readonly string[]): EtiquetaCliente[] {
+  return ETIQUETAS.filter((e) => tipos.includes(e));
+}
 
 const LETRAS_DNI = "TRWAGMYFPDXBNJZSQVHLCKE";
 
@@ -32,16 +51,10 @@ export const clienteSchema = z.object({
     .optional()
     .or(z.literal("")),
   direccion: z.string().optional().or(z.literal("")),
-  tipoCliente: z.nativeEnum(TipoCliente),
+  tipos: z.array(z.enum(ETIQUETAS)).min(1, "Elige al menos una etiqueta"),
   notas: z.string().optional().or(z.literal("")),
   fechaProximoContacto: z.string().optional().or(z.literal("")),
 });
 
 export type ClienteInput = z.infer<typeof clienteSchema>;
 
-export const TIPO_CLIENTE_LABELS: Record<TipoCliente, string> = {
-  COMPRADOR: "Comprador",
-  VENDEDOR: "Vendedor",
-  INQUILINO: "Inquilino",
-  PROPIETARIO: "Propietario",
-};

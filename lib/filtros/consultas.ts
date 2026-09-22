@@ -56,7 +56,7 @@ export function consultaClientes(sp: SP) {
   const and: Prisma.ClienteWhereInput[] = [];
 
   const tipos = leerMulti(sp.tipo, claves(TIPO_CLIENTE_LABELS));
-  if (tipos.length) and.push({ tipoCliente: { in: tipos as (keyof typeof TIPO_CLIENTE_LABELS)[] } });
+  if (tipos.length) and.push({ tipos: { hasSome: tipos as (keyof typeof TIPO_CLIENTE_LABELS)[] } });
 
   const interes = leerMulti(sp.interes, claves(TIPO_OPERACION_LABELS));
   if (interes.length) {

@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format } from "date-fns";
-import { Pencil } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 
 import { prisma } from "@/lib/prisma";
 import { getUrlFirmadaDocumento } from "@/lib/supabase/storage";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   Tabs,
@@ -25,7 +24,8 @@ import { EliminarClienteDialog } from "@/components/clientes/eliminar-cliente-di
 import { ArchivosList } from "@/components/shared/archivos-list";
 import { ArchivoUpload } from "@/components/shared/archivo-upload";
 import { InteresesList } from "@/components/clientes/intereses-list";
-import { TIPO_CLIENTE_LABELS } from "@/lib/validations/cliente";
+import { InmueblesTable } from "@/components/inmuebles/inmuebles-table";
+import { EtiquetasCliente, textoEtiquetas } from "@/components/clientes/etiquetas-cliente";
 import { subirArchivoCliente } from "@/lib/actions/archivos";
 
 export default async function ClienteDetallePage({
@@ -45,6 +45,10 @@ export default async function ClienteDetallePage({
       archivos: { orderBy: { orden: "asc" } },
       intereses: { include: { inmueble: true }, orderBy: { fecha: "desc" } },
       operaciones: { include: { inmueble: true }, orderBy: { fecha: "desc" } },
+      inmueblesEnPropiedad: {
+        include: { bloque: { select: { id: true, calle: true, numero: true } } },
+        orderBy: { referencia: "asc" },
+      },
     },
   });
 
@@ -59,11 +63,13 @@ export default async function ClienteDetallePage({
     }))
   );
 
+  const propiedades = cliente.inmueblesEnPropiedad;
+
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
         back={{ href: "/clientes", label: "Clientes" }}
-        eyebrow={TIPO_CLIENTE_LABELS[cliente.tipoCliente]}
+        eyebrow={textoEtiquetas(cliente.tipos) || "Cliente"}
         title={`${cliente.nombre} ${cliente.apellidos}`}
         description={[cliente.telefono, cliente.email].filter(Boolean).join(" · ") || undefined}
         actions={
@@ -89,6 +95,9 @@ export default async function ClienteDetallePage({
       <Tabs defaultValue="datos" className="rise [animation-delay:80ms]">
         <TabsList variant="line" className="mb-4">
           <TabsTrigger value="datos">Datos</TabsTrigger>
+          <TabsTrigger value="inmuebles">
+            Inmuebles <TabCount n={propiedades.length} />
+          </TabsTrigger>
           <TabsTrigger value="contactos">
             Contactos <TabCount n={cliente.contactos.length} />
           </TabsTrigger>
@@ -105,8 +114,8 @@ export default async function ClienteDetallePage({
           <Card>
             <CardContent>
               <DataList className="lg:grid-cols-3">
-                <DataItem label="Tipo">
-                  <Badge variant="secondary">{TIPO_CLIENTE_LABELS[cliente.tipoCliente]}</Badge>
+                <DataItem label="Etiquetas">
+                  <EtiquetasCliente tipos={cliente.tipos} />
                 </DataItem>
                 <DataItem label="DNI / NIE">
                   {cliente.dni ? <span className="font-mono">{cliente.dni}</span> : "—"}
@@ -136,6 +145,26 @@ export default async function ClienteDetallePage({
               </DataList>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="inmuebles" className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              {propiedades.length === 0
+                ? "No tiene inmuebles en propiedad."
+                : `${propiedades.length} ${propiedades.length === 1 ? "inmueble" : "inmuebles"} en propiedad.`}
+            </p>
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={
+                <Link href={`/inmuebles/nuevo?propietario=${cliente.id}`}>
+                  <Plus /> Añadir inmueble
+                </Link>
+              }
+            />
+          </div>
+          {propiedades.length > 0 && <InmueblesTable inmuebles={propiedades} />}
         </TabsContent>
 
         <TabsContent value="contactos">

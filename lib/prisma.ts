@@ -41,8 +41,18 @@ type ClienteExtendido = ReturnType<typeof crearCliente>;
 
 const globalForPrisma = globalThis as unknown as {
   prisma: ClienteExtendido | undefined;
+  prismaClase: typeof PrismaClient | undefined;
 };
 
-export const prisma = globalForPrisma.prisma ?? crearCliente();
+// Dev keeps one client across hot reloads. After `prisma generate` the client
+// module is re-evaluated with a new class: drop the stale instance, which would
+// not know the new fields, instead of requiring a dev-server restart.
+const cacheVigente = globalForPrisma.prismaClase === PrismaClient;
+if (!cacheVigente) void globalForPrisma.prisma?.$disconnect();
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+export const prisma = (cacheVigente && globalForPrisma.prisma) || crearCliente();
+
+if (process.env.NODE_ENV !== "production") {
+  globalForPrisma.prisma = prisma;
+  globalForPrisma.prismaClase = PrismaClient;
+}
