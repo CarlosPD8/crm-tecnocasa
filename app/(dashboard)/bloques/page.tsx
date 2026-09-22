@@ -18,41 +18,34 @@ import {
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Pagination } from "@/components/shared/pagination";
-import { BloqueFiltros } from "@/components/bloques/bloque-filtros";
+import { BarraFiltros } from "@/components/shared/filtros/barra-filtros";
 import { OcupacionBar } from "@/components/bloques/ocupacion-bar";
 import { PotencialBadge } from "@/components/inmuebles/situacion";
-import type { Prisma } from "@/lib/generated/prisma/client";
+import { consultaBloques } from "@/lib/filtros/consultas";
+import { contarFiltros, paramsDeFiltros } from "@/lib/filtros/definiciones";
 
 const PAGE_SIZE = 20;
 
 export default async function BloquesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { q, page: pageParam } = await searchParams;
-  const page = Math.max(1, Number(pageParam ?? "1") || 1);
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page ?? "1") || 1);
+  const { where, orderBy } = consultaBloques(sp);
+  const filtrado = Boolean(sp.q || contarFiltros("bloques", sp));
 
-  const where: Prisma.BloqueWhereInput = q
-    ? {
-        OR: [
-          { calle: { contains: q, mode: "insensitive" } },
-          { numero: { contains: q, mode: "insensitive" } },
-          { nombre: { contains: q, mode: "insensitive" } },
-          { localidad: { contains: q, mode: "insensitive" } },
-        ],
-      }
-    : {};
-
-  const [bloques, total] = await Promise.all([
+  const [bloques, total, localidades] = await Promise.all([
     prisma.bloque.findMany({
       where,
-      orderBy: [{ calle: "asc" }, { numero: "asc" }],
+      orderBy,
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       include: { _count: { select: { inmuebles: true } } },
     }),
     prisma.bloque.count({ where }),
+    prisma.bloque.findMany({ distinct: ["localidad"], select: { localidad: true }, orderBy: { localidad: "asc" } }),
   ]);
   const resumen = await resumenPorBloque(bloques.map((b) => b.id));
 
@@ -61,7 +54,7 @@ export default async function BloquesPage({
       <PageHeader
         eyebrow="Cartera"
         title="Bloques"
-        description={`${total} ${total === 1 ? "edificio" : "edificios"}${q ? " con la búsqueda actual" : ""}. Agrupa los pisos de un mismo portal para ver su ocupación de un vistazo.`}
+        description={`${total} ${total === 1 ? "edificio" : "edificios"}${filtrado ? " con los filtros actuales" : ""}. Agrupa los pisos de un mismo portal para ver su ocupación de un vistazo.`}
         actions={
           <Button
             size="lg"
@@ -76,14 +69,19 @@ export default async function BloquesPage({
       />
 
       <div className="flex flex-col gap-4">
-        <BloqueFiltros defaultQ={q} />
+        <BarraFiltros
+          entidad="bloques"
+          ariaBusqueda="Buscar bloques"
+          placeholder="Calle, número, nombre o localidad…"
+          opciones={{ localidad: Object.fromEntries(localidades.map((l) => [l.localidad, l.localidad])) }}
+        />
 
         {bloques.length === 0 ? (
-          q ? (
+          filtrado ? (
             <EmptyState
               icon={SearchX}
-              title="Ningún bloque coincide con la búsqueda"
-              description="Prueba con otra calle, número o nombre del edificio."
+              title="Ningún bloque coincide"
+              description="Prueba con otra búsqueda o quita algún filtro."
             />
           ) : (
             <EmptyState
@@ -151,7 +149,7 @@ export default async function BloquesPage({
         )}
       </div>
 
-      <Pagination basePath="/bloques" page={page} pageSize={PAGE_SIZE} total={total} params={{ q }} />
+      <Pagination basePath="/bloques" page={page} pageSize={PAGE_SIZE} total={total} params={paramsDeFiltros("bloques", sp)} />
     </div>
   );
 }

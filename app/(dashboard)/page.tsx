@@ -93,7 +93,7 @@ export default async function DashboardPage() {
         className="rise grid overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/6 [animation-delay:60ms] sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]"
       >
         <Link
-          href="/clientes?seguimiento=pendiente"
+          href="/clientes?proximo=p:vencido&orden=proximo"
           className="group relative flex flex-col justify-between gap-6 bg-primary p-6 text-primary-foreground transition-colors duration-300 hover:bg-[color-mix(in_oklch,var(--primary),black_8%)] dark:bg-accent dark:text-accent-foreground dark:hover:bg-[color-mix(in_oklch,var(--accent),white_5%)] sm:col-span-2 lg:col-span-1"
         >
           <span className="flex items-center justify-between text-sm font-medium opacity-90">
@@ -125,7 +125,7 @@ export default async function DashboardPage() {
             title="Por contactar"
             action={
               pendientesTotal > pendientes.length
-                ? { href: "/clientes?seguimiento=pendiente", label: `Ver los ${pendientesTotal}` }
+                ? { href: "/clientes?proximo=p:vencido&orden=proximo", label: `Ver los ${pendientesTotal}` }
                 : undefined
             }
           >

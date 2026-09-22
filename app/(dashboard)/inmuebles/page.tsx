@@ -3,62 +3,35 @@ import { Plus } from "lucide-react";
 
 import { prisma } from "@/lib/prisma";
 import { Button } from "@/components/ui/button";
-import { InmuebleFiltros } from "@/components/inmuebles/inmueble-filtros";
+import { BarraFiltros } from "@/components/shared/filtros/barra-filtros";
 import { InmueblesTable } from "@/components/inmuebles/inmuebles-table";
 import { Pagination } from "@/components/shared/pagination";
 import { PageHeader } from "@/components/shared/page-header";
-import { OCUPACION_FORM_VALUES } from "@/lib/validations/inmueble";
-import type { Prisma, TipoOperacion, EstadoInmueble } from "@/lib/generated/prisma/client";
+import { consultaInmuebles } from "@/lib/filtros/consultas";
+import { contarFiltros, paramsDeFiltros } from "@/lib/filtros/definiciones";
 
 const PAGE_SIZE = 20;
 
 export default async function InmueblesPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    q?: string;
-    page?: string;
-    tipoOperacion?: string;
-    estado?: string;
-    ocupacion?: string;
-    potencial?: string;
-  }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { q, page: pageParam, tipoOperacion, estado, ocupacion: ocupacionParam, potencial: potencialParam } =
-    await searchParams;
-  const page = Math.max(1, Number(pageParam ?? "1") || 1);
-  // Ignore unknown values instead of letting Prisma throw on a bad enum.
-  const ocupacion = OCUPACION_FORM_VALUES.find((v) => v === ocupacionParam);
-  const soloPotenciales = potencialParam === "1";
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page ?? "1") || 1);
+  const { where, orderBy } = consultaInmuebles(sp);
+  const filtrado = Boolean(sp.q || contarFiltros("inmuebles", sp));
 
-  const where: Prisma.InmuebleWhereInput = {
-    ...(tipoOperacion ? { tipoOperacion: tipoOperacion as TipoOperacion } : {}),
-    ...(estado ? { estado: estado as EstadoInmueble } : {}),
-    ...(ocupacion ? { ocupacion: ocupacion === "SIN_DATOS" ? null : ocupacion } : {}),
-    ...(soloPotenciales ? { adquisicionPotencial: true } : {}),
-    ...(q
-      ? {
-          OR: [
-            { referencia: { contains: q, mode: "insensitive" } },
-            { direccion: { contains: q, mode: "insensitive" } },
-            { localidad: { contains: q, mode: "insensitive" } },
-            { bloque: { calle: { contains: q, mode: "insensitive" } } },
-            { bloque: { nombre: { contains: q, mode: "insensitive" } } },
-          ],
-        }
-      : {}),
-  };
-  const filtrado = Boolean(q || tipoOperacion || estado || ocupacion || soloPotenciales);
-
-  const [inmuebles, total] = await Promise.all([
+  const [inmuebles, total, localidades] = await Promise.all([
     prisma.inmueble.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy,
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       include: { bloque: { select: { id: true, calle: true, numero: true } } },
     }),
     prisma.inmueble.count({ where }),
+    prisma.inmueble.findMany({ distinct: ["localidad"], select: { localidad: true }, orderBy: { localidad: "asc" } }),
   ]);
 
   return (
@@ -81,12 +54,11 @@ export default async function InmueblesPage({
       />
 
       <div className="flex flex-col gap-4">
-        <InmuebleFiltros
-          defaultQ={q}
-          defaultTipoOperacion={tipoOperacion}
-          defaultEstado={estado}
-          defaultOcupacion={ocupacion}
-          defaultPotencial={soloPotenciales}
+        <BarraFiltros
+          entidad="inmuebles"
+          ariaBusqueda="Buscar inmuebles"
+          placeholder="Referencia, dirección, bloque, propietario…"
+          opciones={{ localidad: Object.fromEntries(localidades.map((l) => [l.localidad, l.localidad])) }}
         />
 
         <InmueblesTable inmuebles={inmuebles} filtrado={filtrado} />
@@ -97,7 +69,7 @@ export default async function InmueblesPage({
         page={page}
         pageSize={PAGE_SIZE}
         total={total}
-        params={{ q, tipoOperacion, estado, ocupacion, potencial: soloPotenciales ? "1" : undefined }}
+        params={paramsDeFiltros("inmuebles", sp)}
       />
     </div>
   );
