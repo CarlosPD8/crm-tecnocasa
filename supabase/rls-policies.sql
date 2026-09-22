@@ -12,6 +12,9 @@ alter table "Interes" enable row level security;
 alter table "Operacion" enable row level security;
 alter table "Archivo" enable row level security;
 alter table "Bloque" enable row level security;
+-- Prisma's migration history: no policy on purpose, so the public API can't
+-- read or write it. Prisma connects as the table owner and is not affected.
+alter table "_prisma_migrations" enable row level security;
 
 create policy "cliente_authenticated_all" on "Cliente" for all to authenticated using (true) with check (true);
 create policy "contacto_authenticated_all" on "Contacto" for all to authenticated using (true) with check (true);
