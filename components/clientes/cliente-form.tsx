@@ -34,6 +34,7 @@ export function ClienteForm({ cliente }: { cliente?: Cliente }) {
     register,
     handleSubmit,
     control,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<ClienteInput>({
     resolver: zodResolver(clienteSchema),
@@ -41,6 +42,7 @@ export function ClienteForm({ cliente }: { cliente?: Cliente }) {
       ? {
           nombre: cliente.nombre,
           apellidos: cliente.apellidos,
+          dni: cliente.dni ?? "",
           telefono: cliente.telefono ?? "",
           email: cliente.email ?? "",
           direccion: cliente.direccion ?? "",
@@ -59,6 +61,10 @@ export function ClienteForm({ cliente }: { cliente?: Cliente }) {
       : await crearCliente(data);
 
     if (!result.success) {
+      // Surface server errors (e.g. duplicate DNI) next to their field.
+      for (const [campo, mensajes] of Object.entries(result.error)) {
+        if (mensajes?.[0]) setError(campo as keyof ClienteInput, { message: mensajes[0] });
+      }
       toast.error("Revisa los datos del formulario.");
       return;
     }
@@ -87,6 +93,17 @@ export function ClienteForm({ cliente }: { cliente?: Cliente }) {
             aria-invalid={!!errors.apellidos}
             aria-describedby={errors.apellidos ? "apellidos-error" : undefined}
             {...register("apellidos")}
+          />
+        </Field>
+        <Field label="DNI / NIE" htmlFor="dni" optional error={errors.dni?.message} hint="Se comprueba la letra de control.">
+          <Input
+            id="dni"
+            autoComplete="off"
+            placeholder="12345678Z"
+            className="font-mono uppercase placeholder:normal-case"
+            aria-invalid={!!errors.dni}
+            aria-describedby={errors.dni ? "dni-error" : undefined}
+            {...register("dni")}
           />
         </Field>
         <Field label="Tipo de cliente" className="sm:col-span-2">

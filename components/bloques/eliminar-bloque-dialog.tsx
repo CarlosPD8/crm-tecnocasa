@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 
-import { eliminarInmueble } from "@/lib/actions/inmuebles";
+import { eliminarBloque } from "@/lib/actions/bloques";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -19,12 +19,14 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-export function EliminarInmuebleDialog({
-  inmuebleId,
-  referencia,
+export function EliminarBloqueDialog({
+  bloqueId,
+  direccion,
+  pisos,
 }: {
-  inmuebleId: string;
-  referencia: string;
+  bloqueId: string;
+  direccion: string;
+  pisos: number;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -32,15 +34,15 @@ export function EliminarInmuebleDialog({
 
   function handleDelete() {
     startTransition(async () => {
-      const result = await eliminarInmueble(inmuebleId);
+      const result = await eliminarBloque(bloqueId);
       if (!result.success) {
         // Close so the dialog doesn't cover the page behind the error toast.
         setOpen(false);
         toast.error(result.error);
         return;
       }
-      toast.success("Inmueble eliminado.");
-      router.push("/inmuebles");
+      toast.success("Bloque eliminado.");
+      router.push("/bloques");
     });
   }
 
@@ -55,18 +57,19 @@ export function EliminarInmuebleDialog({
       />
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>¿Eliminar el inmueble {referencia}?</AlertDialogTitle>
+          <AlertDialogTitle>¿Eliminar el bloque {direccion}?</AlertDialogTitle>
           <AlertDialogDescription>
-            Esta acción no se puede deshacer. Se eliminarán sus fotos,
-            documentos, interesados y contactos (también de la ficha de las
-            personas con las que se habló). No se podrá eliminar si tiene
-            operaciones cerradas.
+            {pisos > 0
+              ? pisos === 1
+                ? "Tiene 1 inmueble. Para eliminarlo, primero quita ese inmueble del bloque desde su ficha."
+                : `Tiene ${pisos} inmuebles. Para eliminarlo, primero quítalos del bloque desde su ficha.`
+              : "Esta acción no se puede deshacer."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" disabled={isPending} onClick={handleDelete}>
-            {isPending ? "Eliminando…" : "Eliminar inmueble"}
+          <AlertDialogAction disabled={isPending} onClick={handleDelete} variant="destructive">
+            {isPending ? "Eliminando…" : "Eliminar"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

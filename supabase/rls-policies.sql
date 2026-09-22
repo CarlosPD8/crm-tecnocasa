@@ -11,6 +11,7 @@ alter table "Inmueble" enable row level security;
 alter table "Interes" enable row level security;
 alter table "Operacion" enable row level security;
 alter table "Archivo" enable row level security;
+alter table "Bloque" enable row level security;
 
 create policy "cliente_authenticated_all" on "Cliente" for all to authenticated using (true) with check (true);
 create policy "contacto_authenticated_all" on "Contacto" for all to authenticated using (true) with check (true);
@@ -18,3 +19,4 @@ create policy "inmueble_authenticated_all" on "Inmueble" for all to authenticate
 create policy "interes_authenticated_all" on "Interes" for all to authenticated using (true) with check (true);
 create policy "operacion_authenticated_all" on "Operacion" for all to authenticated using (true) with check (true);
 create policy "archivo_authenticated_all" on "Archivo" for all to authenticated using (true) with check (true);
+create policy "bloque_authenticated_all" on "Bloque" for all to authenticated using (true) with check (true);

@@ -20,6 +20,8 @@ import { ListHeading } from "@/components/shared/item-list";
 import { TabCount } from "@/components/shared/tab-count";
 import { ContactosList } from "@/components/clientes/contactos-list";
 import { ContactoForm } from "@/components/clientes/contacto-form";
+import { crearContacto } from "@/lib/actions/contactos";
+import { EliminarClienteDialog } from "@/components/clientes/eliminar-cliente-dialog";
 import { ArchivosList } from "@/components/shared/archivos-list";
 import { ArchivoUpload } from "@/components/shared/archivo-upload";
 import { InteresesList } from "@/components/clientes/intereses-list";
@@ -36,7 +38,10 @@ export default async function ClienteDetallePage({
   const cliente = await prisma.cliente.findUnique({
     where: { id },
     include: {
-      contactos: { orderBy: { fecha: "desc" } },
+      contactos: {
+        orderBy: { fecha: "desc" },
+        include: { inmueble: { select: { id: true, referencia: true } } },
+      },
       archivos: { orderBy: { orden: "asc" } },
       intereses: { include: { inmueble: true }, orderBy: { fecha: "desc" } },
       operaciones: { include: { inmueble: true }, orderBy: { fecha: "desc" } },
@@ -62,16 +67,22 @@ export default async function ClienteDetallePage({
         title={`${cliente.nombre} ${cliente.apellidos}`}
         description={[cliente.telefono, cliente.email].filter(Boolean).join(" · ") || undefined}
         actions={
-          <Button
-            variant="outline"
-            size="lg"
-            nativeButton={false}
-            render={
-              <Link href={`/clientes/${cliente.id}/editar`}>
-                <Pencil /> Editar
-              </Link>
-            }
-          />
+          <>
+            <EliminarClienteDialog
+              clienteId={cliente.id}
+              nombreCompleto={`${cliente.nombre} ${cliente.apellidos}`}
+            />
+            <Button
+              variant="outline"
+              size="lg"
+              nativeButton={false}
+              render={
+                <Link href={`/clientes/${cliente.id}/editar`}>
+                  <Pencil /> Editar
+                </Link>
+              }
+            />
+          </>
         }
       />
 
@@ -96,6 +107,9 @@ export default async function ClienteDetallePage({
               <DataList className="lg:grid-cols-3">
                 <DataItem label="Tipo">
                   <Badge variant="secondary">{TIPO_CLIENTE_LABELS[cliente.tipoCliente]}</Badge>
+                </DataItem>
+                <DataItem label="DNI / NIE">
+                  {cliente.dni ? <span className="font-mono">{cliente.dni}</span> : "—"}
                 </DataItem>
                 <DataItem label="Teléfono">{cliente.telefono ?? "—"}</DataItem>
                 <DataItem label="Email">{cliente.email ?? "—"}</DataItem>
@@ -127,9 +141,9 @@ export default async function ClienteDetallePage({
         <TabsContent value="contactos">
           <Card>
             <CardContent className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
-              <div className="flex flex-col gap-3 lg:sticky lg:top-20 lg:self-start">
+              <div className="flex flex-col gap-3 lg:self-start">
                 <ListHeading title="Registrar contacto" />
-                <ContactoForm clienteId={cliente.id} />
+                <ContactoForm registrar={crearContacto.bind(null, cliente.id)} />
               </div>
               <div className="flex flex-col gap-4">
                 <ListHeading title="Historial" count={cliente.contactos.length} />

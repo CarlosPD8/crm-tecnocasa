@@ -46,10 +46,39 @@ enum CategoriaArchivo {
   DOCUMENTO
 }
 
+// Quién vive en el inmueble. null = «Sin datos».
+enum Ocupacion {
+  INQUILINOS
+  PROPIETARIO
+  VACIO
+}
+
+// Edificio que agrupa pisos. calle + numero + localidad lo identifican de forma
+// única, lo que permite hacer upsert al importar desde Excel.
+model Bloque {
+  id           String   @id @default(cuid())
+  calle        String
+  numero       String
+  localidad    String
+  nombre       String?
+  codigoPostal String?
+  notas        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  inmuebles Inmueble[]
+
+  @@unique([calle, numero, localidad])
+  @@index([localidad])
+}
+
 model Cliente {
   id                   String      @id @default(cuid())
   nombre               String
   apellidos            String
+  // DNI/NIE normalizado (sin espacios ni guiones, en mayúsculas). Único: sirve
+  // para detectar duplicados, también al importar desde Excel.
+  dni                  String?     @unique
   telefono             String?
   email                String?
   direccion            String?
@@ -74,15 +103,21 @@ model Cliente {
   @@index([fechaProximoContacto])
 }
 
+// Un contacto puede ser con un cliente, sobre un inmueble, o ambos (p. ej. llamada
+// al propietario sobre su piso): así aparece en los dos historiales sin duplicarse.
+// La migración añade un CHECK que exige al menos uno de los dos.
 model Contacto {
-  id        String   @id @default(cuid())
-  clienteId String
-  fecha     DateTime @default(now())
-  nota      String
+  id         String   @id @default(cuid())
+  clienteId  String?
+  inmuebleId String?
+  fecha      DateTime @default(now())
+  nota       String
 
-  cliente Cliente @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  cliente  Cliente?  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  inmueble Inmueble? @relation(fields: [inmuebleId], references: [id], onDelete: Cascade)
 
   @@index([clienteId])
+  @@index([inmuebleId])
   @@index([fecha])
 }
 
@@ -103,11 +138,28 @@ model Inmueble {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
+  // Ubicación dentro del bloque. planta es entera para poder ordenar (0 = Bajo).
+  bloqueId String?
+  escalera String?
+  planta   Int?
+  puerta   String?
+
+  ocupacion            Ocupacion?
+  adquisicionPotencial Boolean    @default(false)
+  fechaUltimoContacto  DateTime?
+
   propietario Cliente?    @relation("PropietarioInmueble", fields: [propietarioId], references: [id], onDelete: Restrict)
+  bloque      Bloque?     @relation(fields: [bloqueId], references: [id], onDelete: Restrict)
   archivos    Archivo[]
   intereses   Interes[]
   operaciones Operacion[]
+  contactos   Contacto[]
 
+  @@index([bloqueId])
+  @@index([bloqueId, escalera, planta, puerta])
+  @@index([ocupacion])
+  @@index([adquisicionPotencial])
+  @@index([fechaUltimoContacto])
   @@index([localidad])
   @@index([estado])
   @@index([tipoOperacion])

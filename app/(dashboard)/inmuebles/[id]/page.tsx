@@ -22,11 +22,22 @@ import { OperacionPanel } from "@/components/inmuebles/operacion-panel";
 import { PageHeader } from "@/components/shared/page-header";
 import { DataItem, DataList } from "@/components/shared/data-list";
 import { EstadoBadge } from "@/components/inmuebles/estado-badge";
+import { EliminarInmuebleDialog } from "@/components/inmuebles/eliminar-inmueble-dialog";
 import { TabCount } from "@/components/shared/tab-count";
+import { ListHeading } from "@/components/shared/item-list";
+import { ContactosList } from "@/components/clientes/contactos-list";
+import { ContactoInmuebleForm } from "@/components/inmuebles/contacto-inmueble-form";
+import {
+  OcupacionBadge,
+  PotencialBadge,
+  UltimoContacto,
+} from "@/components/inmuebles/situacion";
 import {
   TIPO_INMUEBLE_LABELS,
   TIPO_OPERACION_LABELS,
+  formatUbicacion,
 } from "@/lib/validations/inmueble";
+import { formatBloque } from "@/lib/validations/bloque";
 
 const formatoPrecio = new Intl.NumberFormat("es-ES", {
   style: "currency",
@@ -45,6 +56,11 @@ export default async function InmuebleDetallePage({
     where: { id },
     include: {
       propietario: true,
+      bloque: true,
+      contactos: {
+        orderBy: { fecha: "desc" },
+        include: { cliente: { select: { id: true, nombre: true, apellidos: true } } },
+      },
       archivos: { orderBy: { orden: "asc" } },
       intereses: { include: { cliente: true }, orderBy: { fecha: "desc" } },
       operaciones: { include: { cliente: true }, orderBy: { fecha: "desc" } },
@@ -67,51 +83,82 @@ export default async function InmuebleDetallePage({
 
   const puedeCerrarOperacion =
     inmueble.estado === "DISPONIBLE" || inmueble.estado === "RESERVADO";
+  const ubicacion = formatUbicacion(inmueble);
 
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
-        back={{ href: "/inmuebles", label: "Inmuebles" }}
-        eyebrow={<span className="font-mono tracking-normal normal-case">{inmueble.referencia}</span>}
-        title={inmueble.direccion}
+        back={
+          inmueble.bloque
+            ? { href: `/bloques/${inmueble.bloque.id}`, label: formatBloque(inmueble.bloque) }
+            : { href: "/inmuebles", label: "Inmuebles" }
+        }
+        eyebrow={
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="font-mono tracking-normal normal-case">{inmueble.referencia}</span>
+            {inmueble.adquisicionPotencial && <PotencialBadge />}
+          </span>
+        }
+        title={
+          <>
+            {inmueble.direccion}
+            {ubicacion && <span className="text-muted-foreground"> · {ubicacion}</span>}
+          </>
+        }
         description={`${inmueble.localidad} · ${TIPO_INMUEBLE_LABELS[inmueble.tipoInmueble]} · ${TIPO_OPERACION_LABELS[inmueble.tipoOperacion]}`}
         actions={
-          <Button
-            variant="outline"
-            size="lg"
-            nativeButton={false}
-            render={
-              <Link href={`/inmuebles/${inmueble.id}/editar`}>
-                <Pencil /> Editar
-              </Link>
-            }
-          />
+          <>
+            <EliminarInmuebleDialog inmuebleId={inmueble.id} referencia={inmueble.referencia} />
+            <Button
+              variant="outline"
+              size="lg"
+              nativeButton={false}
+              render={
+                <Link href={`/inmuebles/${inmueble.id}/editar`}>
+                  <Pencil /> Editar
+                </Link>
+              }
+            />
+          </>
         }
       />
 
-      <dl className="rise grid grid-cols-2 overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/6 [animation-delay:60ms] sm:grid-cols-4">
-        <div className="col-span-2 flex flex-col gap-2 p-5 sm:col-span-1">
+      {/* gap-px over a border-colored background draws the dividers at every breakpoint. */}
+      <dl className="rise grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-border/70 shadow-soft ring-1 ring-foreground/6 [animation-delay:60ms] sm:grid-cols-3 lg:grid-cols-6">
+        <div className="col-span-2 flex flex-col gap-2 bg-card p-5 sm:col-span-1">
           <dt className="eyebrow">Precio</dt>
           <dd className="font-display tabular text-4xl leading-none">
             {formatoPrecio.format(Number(inmueble.precio))}
           </dd>
         </div>
-        <div className="flex flex-col gap-2 border-t border-border/70 p-5 sm:border-t-0 sm:border-l">
+        <div className="flex flex-col gap-2 bg-card p-5">
           <dt className="eyebrow">Estado</dt>
           <dd>
             <EstadoBadge estado={inmueble.estado} className="text-sm" />
           </dd>
         </div>
-        <div className="flex flex-col gap-2 border-t border-l border-border/70 p-5 sm:border-t-0">
+        <div className="flex flex-col gap-2 bg-card p-5">
+          <dt className="eyebrow">Ocupación</dt>
+          <dd>
+            <OcupacionBadge ocupacion={inmueble.ocupacion} className="text-sm" />
+          </dd>
+        </div>
+        <div className="flex flex-col gap-2 bg-card p-5">
           <dt className="eyebrow">Superficie</dt>
           <dd className="tabular text-sm font-medium">
             {inmueble.metrosCuadrados ? `${inmueble.metrosCuadrados} m²` : "—"}
           </dd>
         </div>
-        <div className="col-span-2 flex flex-col gap-2 border-t border-border/70 p-5 sm:col-span-1 sm:border-t-0 sm:border-l">
+        <div className="flex flex-col gap-2 bg-card p-5">
           <dt className="eyebrow">Hab. / Baños</dt>
           <dd className="tabular text-sm font-medium">
             {inmueble.habitaciones ?? "—"} / {inmueble.banos ?? "—"}
+          </dd>
+        </div>
+        <div className="col-span-2 flex flex-col gap-2 bg-card p-5 sm:col-span-1">
+          <dt className="eyebrow">Último contacto</dt>
+          <dd className="text-sm font-medium">
+            <UltimoContacto fecha={inmueble.fechaUltimoContacto} />
           </dd>
         </div>
       </dl>
@@ -119,6 +166,9 @@ export default async function InmuebleDetallePage({
       <Tabs defaultValue="datos" className="rise [animation-delay:120ms]">
         <TabsList variant="line" className="mb-4">
           <TabsTrigger value="datos">Datos</TabsTrigger>
+          <TabsTrigger value="contactos">
+            Contactos <TabCount n={inmueble.contactos.length} />
+          </TabsTrigger>
           <TabsTrigger value="fotos">
             Fotos <TabCount n={fotos.length} />
           </TabsTrigger>
@@ -155,12 +205,53 @@ export default async function InmuebleDetallePage({
                     "—"
                   )}
                 </DataItem>
+                <DataItem label="Bloque">
+                  {inmueble.bloque ? (
+                    <Link
+                      href={`/bloques/${inmueble.bloque.id}`}
+                      className="font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                      {formatBloque(inmueble.bloque)}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
+                </DataItem>
+                <DataItem label="Escalera · planta · puerta">{ubicacion ?? "—"}</DataItem>
+                <DataItem label="Adquisición potencial">
+                  {inmueble.adquisicionPotencial ? <PotencialBadge /> : "No"}
+                </DataItem>
                 <DataItem label="Descripción" className="sm:col-span-2 lg:col-span-3">
                   <p className="max-w-[70ch] whitespace-pre-wrap leading-relaxed">
                     {inmueble.descripcion ?? "—"}
                   </p>
                 </DataItem>
               </DataList>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="contactos">
+          <Card>
+            <CardContent className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+              <div className="flex flex-col gap-3 lg:self-start">
+                <ListHeading title="Registrar contacto" />
+                <ContactoInmuebleForm
+                  inmuebleId={inmueble.id}
+                  propietario={
+                    inmueble.propietario
+                      ? {
+                          id: inmueble.propietario.id,
+                          label: `${inmueble.propietario.nombre} ${inmueble.propietario.apellidos}`,
+                        }
+                      : null
+                  }
+                />
+              </div>
+              <div className="flex flex-col gap-4">
+                <ListHeading title="Historial" count={inmueble.contactos.length} />
+                <ContactosList contactos={inmueble.contactos} contexto="inmueble" />
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

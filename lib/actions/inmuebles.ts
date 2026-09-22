@@ -29,7 +29,18 @@ function buildData(data: InmuebleInput) {
     descripcion: toNullable(data.descripcion),
     estado: data.estado,
     propietarioId: toNullable(data.propietarioId),
+    bloqueId: toNullable(data.bloqueId),
+    escalera: toNullable(data.escalera?.trim()),
+    planta: toIntOrNull(data.planta),
+    puerta: toNullable(data.puerta?.trim()),
+    ocupacion: data.ocupacion === "SIN_DATOS" ? null : data.ocupacion,
+    adquisicionPotencial: data.adquisicionPotencial,
   };
+}
+
+function revalidarBloque(bloqueId: string | null) {
+  if (bloqueId) revalidatePath(`/bloques/${bloqueId}`);
+  revalidatePath("/bloques");
 }
 
 export async function crearInmueble(data: InmuebleInput) {
@@ -53,6 +64,7 @@ export async function crearInmueble(data: InmuebleInput) {
   const inmueble = await prisma.inmueble.create({ data: buildData(parsed.data) });
 
   revalidatePath("/inmuebles");
+  revalidarBloque(inmueble.bloqueId);
   return { success: true as const, inmuebleId: inmueble.id };
 }
 
@@ -74,13 +86,17 @@ export async function actualizarInmueble(id: string, data: InmuebleInput) {
     };
   }
 
-  await prisma.inmueble.update({
+  const anterior = await prisma.inmueble.findUnique({ where: { id }, select: { bloqueId: true } });
+  const actualizado = await prisma.inmueble.update({
     where: { id },
     data: buildData(parsed.data),
   });
 
   revalidatePath("/inmuebles");
   revalidatePath(`/inmuebles/${id}`);
+  // Moving a flat between blocks changes both block pages.
+  revalidarBloque(anterior?.bloqueId ?? null);
+  if (actualizado.bloqueId !== anterior?.bloqueId) revalidarBloque(actualizado.bloqueId);
   return { success: true as const, inmuebleId: id };
 }
 
@@ -99,7 +115,8 @@ export async function eliminarInmueble(id: string) {
     };
   }
 
-  await prisma.inmueble.delete({ where: { id } });
+  const borrado = await prisma.inmueble.delete({ where: { id } });
   revalidatePath("/inmuebles");
+  revalidarBloque(borrado.bloqueId);
   return { success: true as const };
 }

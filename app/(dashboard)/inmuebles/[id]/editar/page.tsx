@@ -11,10 +11,14 @@ export default async function EditarInmueblePage({
   const { id } = await params;
   const inmueble = await prisma.inmueble.findUnique({
     where: { id },
-    include: { propietario: true },
+    include: {
+      propietario: true,
+      bloque: { select: { id: true, calle: true, numero: true, localidad: true } },
+    },
   });
 
   if (!inmueble) notFound();
+  const { propietario, bloque, ...datos } = inmueble;
 
   return (
     <div className="flex flex-col gap-8">
@@ -24,15 +28,13 @@ export default async function EditarInmueblePage({
         title={inmueble.direccion}
       />
       <InmuebleForm
-        inmueble={{ ...inmueble, precio: inmueble.precio.toString() }}
+        inmueble={{ ...datos, precio: datos.precio.toString() }}
         propietarioInicial={
-          inmueble.propietario
-            ? {
-                id: inmueble.propietario.id,
-                label: `${inmueble.propietario.nombre} ${inmueble.propietario.apellidos}`,
-              }
+          propietario
+            ? { id: propietario.id, label: `${propietario.nombre} ${propietario.apellidos}` }
             : null
         }
+        bloqueInicial={bloque}
       />
     </div>
   );

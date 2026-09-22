@@ -63,7 +63,7 @@ export function ClienteFiltros({
         <Input
           type="search"
           aria-label="Buscar clientes"
-          placeholder="Nombre, teléfono o email…"
+          placeholder="Nombre, teléfono, email o DNI…"
           value={q}
           onChange={(e) => {
             const value = e.target.value;

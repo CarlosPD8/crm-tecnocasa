@@ -7,6 +7,7 @@ import { ClienteFiltros } from "@/components/clientes/cliente-filtros";
 import { ClientesTable } from "@/components/clientes/clientes-table";
 import { Pagination } from "@/components/shared/pagination";
 import { PageHeader } from "@/components/shared/page-header";
+import { normalizarDni } from "@/lib/validations/cliente";
 import type { Prisma, TipoCliente } from "@/lib/generated/prisma/client";
 
 const PAGE_SIZE = 20;
@@ -33,6 +34,7 @@ export default async function ClientesPage({
             { apellidos: { contains: q, mode: "insensitive" } },
             { telefono: { contains: q, mode: "insensitive" } },
             { email: { contains: q, mode: "insensitive" } },
+            { dni: { contains: normalizarDni(q), mode: "insensitive" } },
           ],
         }
       : {}),

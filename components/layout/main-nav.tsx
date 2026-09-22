@@ -8,6 +8,7 @@ const links = [
   { href: "/", label: "Panel" },
   { href: "/clientes", label: "Clientes" },
   { href: "/inmuebles", label: "Inmuebles" },
+  { href: "/bloques", label: "Bloques" },
 ];
 
 export function MainNav({ className }: { className?: string }) {

@@ -12,8 +12,12 @@ import {
   TIPO_INMUEBLE_LABELS,
   TIPO_OPERACION_LABELS,
   ESTADO_INMUEBLE_LABELS,
+  OCUPACION_LABELS,
+  ESCALERA_SUGERENCIAS,
   type InmuebleInput,
 } from "@/lib/validations/inmueble";
+import { formatBloque } from "@/lib/validations/bloque";
+import { BloquePicker, type BloqueSeleccionado } from "@/components/shared/bloque-picker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,22 +43,29 @@ import type { Inmueble } from "@/lib/generated/prisma/client";
 // Client Component: el llamador debe convertirlo a string antes de pasarlo.
 export type InmuebleParaFormulario = Omit<Inmueble, "precio"> & { precio: string };
 
+const SI_NO = { SI: "Sí", NO: "No" } as const;
+
 export function InmuebleForm({
   inmueble,
   propietarioInicial,
+  bloqueInicial,
 }: {
   inmueble?: InmuebleParaFormulario;
   propietarioInicial?: { id: string; label: string } | null;
+  bloqueInicial?: BloqueSeleccionado | null;
 }) {
   const router = useRouter();
   const [propietario, setPropietario] = useState<{ id: string; label: string } | null>(
     propietarioInicial ?? null
   );
+  const [bloque, setBloque] = useState<BloqueSeleccionado | null>(bloqueInicial ?? null);
 
   const {
     register,
     handleSubmit,
     control,
+    getValues,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<InmuebleInput>({
     resolver: zodResolver(inmuebleSchema),
@@ -72,16 +83,46 @@ export function InmuebleForm({
           descripcion: inmueble.descripcion ?? "",
           estado: inmueble.estado,
           propietarioId: inmueble.propietarioId ?? "",
+          escalera: inmueble.escalera ?? "",
+          planta: inmueble.planta?.toString() ?? "",
+          puerta: inmueble.puerta ?? "",
+          ocupacion: inmueble.ocupacion ?? "SIN_DATOS",
+          adquisicionPotencial: inmueble.adquisicionPotencial,
         }
       : {
           tipoInmueble: "PISO",
           tipoOperacion: "VENTA",
           estado: "DISPONIBLE",
+          // Preselected block (e.g. «Añadir piso a este bloque»): start from its address.
+          direccion: bloqueInicial ? formatBloque(bloqueInicial) : "",
+          localidad: bloqueInicial?.localidad ?? "",
+          ocupacion: "SIN_DATOS",
+          adquisicionPotencial: false,
         },
   });
 
+  function cambiarBloque(siguiente: BloqueSeleccionado | null) {
+    // Prefill address/locality only when they are empty or still show the
+    // previous block's values, so hand-typed text is never overwritten.
+    const anteriorDireccion = bloque ? formatBloque(bloque) : "";
+    if (siguiente) {
+      const { direccion, localidad } = getValues();
+      if (!direccion || direccion === anteriorDireccion) {
+        setValue("direccion", formatBloque(siguiente), { shouldValidate: true });
+      }
+      if (!localidad || localidad === bloque?.localidad) {
+        setValue("localidad", siguiente.localidad, { shouldValidate: true });
+      }
+    }
+    setBloque(siguiente);
+  }
+
   async function onSubmit(data: InmuebleInput) {
-    const payload = { ...data, propietarioId: propietario?.id ?? "" };
+    const payload = {
+      ...data,
+      propietarioId: propietario?.id ?? "",
+      bloqueId: bloque?.id ?? "",
+    };
 
     const result = inmueble
       ? await actualizarInmueble(inmueble.id, payload)
@@ -100,7 +141,10 @@ export function InmuebleForm({
 
   return (
     <FormShell onSubmit={handleSubmit(onSubmit)} noValidate className="max-w-4xl">
-      <FormSection title="Ubicación" description="La referencia es el código interno con el que se busca el inmueble.">
+      <FormSection
+        title="Ubicación"
+        description="La referencia es el código interno con el que se busca el inmueble. El bloque agrupa los pisos del mismo edificio."
+      >
         <Field label="Referencia" htmlFor="referencia" error={errors.referencia?.message}>
           <Input
             id="referencia"
@@ -119,13 +163,77 @@ export function InmuebleForm({
             {...register("localidad")}
           />
         </Field>
+        <Field label="Bloque" optional className="sm:col-span-2" hint="Al elegirlo se rellenan la dirección y la localidad.">
+          <BloquePicker value={bloque} onChange={cambiarBloque} obtenerLocalidad={() => getValues("localidad")} />
+        </Field>
         <Field label="Dirección" htmlFor="direccion" error={errors.direccion?.message} className="sm:col-span-2">
           <Input
             id="direccion"
-            placeholder="Calle, número, piso y puerta"
+            placeholder="Calle y número"
             aria-invalid={!!errors.direccion}
             aria-describedby={errors.direccion ? "direccion-error" : undefined}
             {...register("direccion")}
+          />
+        </Field>
+        <div className="grid grid-cols-3 gap-4 sm:col-span-2">
+          <Field label="Escalera" htmlFor="escalera" optional>
+            <Input id="escalera" list="escaleras" autoComplete="off" {...register("escalera")} />
+            <datalist id="escaleras">
+              {ESCALERA_SUGERENCIAS.map((e) => (
+                <option key={e} value={e} />
+              ))}
+            </datalist>
+          </Field>
+          <Field label="Planta" htmlFor="planta" optional error={errors.planta?.message} hint="0 = Bajo">
+            <Input
+              id="planta"
+              type="number"
+              step="1"
+              inputMode="numeric"
+              className="tabular"
+              aria-invalid={!!errors.planta}
+              aria-describedby={errors.planta ? "planta-error" : undefined}
+              {...register("planta")}
+            />
+          </Field>
+          <Field label="Puerta" htmlFor="puerta" optional>
+            <Input id="puerta" autoComplete="off" placeholder="B" {...register("puerta")} />
+          </Field>
+        </div>
+      </FormSection>
+
+      <FormSection
+        title="Situación"
+        description="Quién vive ahora en el inmueble y si es una posible captación."
+      >
+        <Field label="Ocupación" className="sm:col-span-2">
+          <Controller
+            control={control}
+            name="ocupacion"
+            render={({ field }) => (
+              <Segmented
+                name="ocupacion"
+                aria-label="Ocupación"
+                value={field.value}
+                onChange={field.onChange}
+                options={OCUPACION_LABELS}
+              />
+            )}
+          />
+        </Field>
+        <Field label="Adquisición potencial" hint="Marca los pisos que podrían captarse para la cartera.">
+          <Controller
+            control={control}
+            name="adquisicionPotencial"
+            render={({ field }) => (
+              <Segmented
+                name="adquisicionPotencial"
+                aria-label="Adquisición potencial"
+                value={field.value ? "SI" : "NO"}
+                onChange={(v) => field.onChange(v === "SI")}
+                options={SI_NO}
+              />
+            )}
           />
         </Field>
       </FormSection>

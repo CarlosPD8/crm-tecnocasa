@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Pencil, Eye, House, SearchX } from "lucide-react";
+import { House, SearchX } from "lucide-react";
 
 import {
   Table,
@@ -11,13 +11,19 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ENLACE_FILA, ENLACE_INTERIOR, FILA_CLICABLE } from "@/components/shared/row-link";
 import { EstadoBadge } from "@/components/inmuebles/estado-badge";
-import { EliminarInmuebleDialog } from "@/components/inmuebles/eliminar-inmueble-dialog";
+import { OcupacionBadge, PotencialBadge, UltimoContacto } from "@/components/inmuebles/situacion";
 import {
   TIPO_INMUEBLE_LABELS,
   TIPO_OPERACION_LABELS,
+  formatUbicacion,
 } from "@/lib/validations/inmueble";
+import { formatBloque } from "@/lib/validations/bloque";
+import { cn } from "@/lib/utils";
 import type { Inmueble } from "@/lib/generated/prisma/client";
+
+type InmuebleFila = Inmueble & { bloque: { id: string; calle: string; numero: string } | null };
 
 const formatoPrecio = new Intl.NumberFormat("es-ES", {
   style: "currency",
@@ -29,7 +35,7 @@ export function InmueblesTable({
   inmuebles,
   filtrado = false,
 }: {
-  inmuebles: Inmueble[];
+  inmuebles: InmuebleFila[];
   filtrado?: boolean;
 }) {
   if (inmuebles.length === 0) {
@@ -37,7 +43,7 @@ export function InmueblesTable({
       <EmptyState
         icon={SearchX}
         title="Ningún inmueble coincide con la búsqueda"
-        description="Prueba con otra referencia, calle o localidad, o quita alguno de los filtros."
+        description="Prueba con otra referencia, calle o bloque, o quita alguno de los filtros."
       />
     ) : (
       <EmptyState
@@ -63,70 +69,68 @@ export function InmueblesTable({
           <TableHead>Tipo</TableHead>
           <TableHead className="text-right">Precio</TableHead>
           <TableHead>Estado</TableHead>
-          <TableHead className="text-right">
-            <span className="sr-only">Acciones</span>
-          </TableHead>
+          <TableHead>Ocupación</TableHead>
+          <TableHead>Último contacto</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {inmuebles.map((inmueble) => (
-          <TableRow key={inmueble.id} className="group/row">
-            <TableCell>
-              <Link
-                href={`/inmuebles/${inmueble.id}`}
-                className="font-mono text-xs font-medium hover:text-primary"
-              >
-                {inmueble.referencia}
-              </Link>
-            </TableCell>
-            <TableCell>
-              <span className="block font-medium">{inmueble.direccion}</span>
-              <span className="block text-xs text-muted-foreground">{inmueble.localidad}</span>
-            </TableCell>
-            <TableCell>
-              <span className="block">{TIPO_INMUEBLE_LABELS[inmueble.tipoInmueble]}</span>
-              <span className="block text-xs text-muted-foreground">
-                {TIPO_OPERACION_LABELS[inmueble.tipoOperacion]}
-              </span>
-            </TableCell>
-            <TableCell className="text-right font-medium">
-              {formatoPrecio.format(Number(inmueble.precio))}
-            </TableCell>
-            <TableCell>
-              <EstadoBadge estado={inmueble.estado} />
-            </TableCell>
-            <TableCell>
-              <div className="flex justify-end gap-0.5 opacity-60 transition-opacity duration-200 group-hover/row:opacity-100 focus-within:opacity-100">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Ver inmueble"
-                  nativeButton={false}
-                  render={
-                    <Link href={`/inmuebles/${inmueble.id}`}>
-                      <Eye />
-                    </Link>
-                  }
-                />
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Editar inmueble"
-                  nativeButton={false}
-                  render={
-                    <Link href={`/inmuebles/${inmueble.id}/editar`}>
-                      <Pencil />
-                    </Link>
-                  }
-                />
-                <EliminarInmuebleDialog
-                  inmuebleId={inmueble.id}
-                  referencia={inmueble.referencia}
-                />
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
+        {inmuebles.map((inmueble) => {
+          const ubicacion = formatUbicacion(inmueble);
+          return (
+            <TableRow key={inmueble.id} className={FILA_CLICABLE}>
+              <TableCell>
+                <span className="flex items-center gap-1.5">
+                  <Link
+                    href={`/inmuebles/${inmueble.id}`}
+                    data-row-link
+                    className={cn("font-mono text-xs font-medium", ENLACE_FILA)}
+                  >
+                    {inmueble.referencia}
+                  </Link>
+                  {inmueble.adquisicionPotencial && <PotencialBadge compact />}
+                </span>
+              </TableCell>
+              <TableCell>
+                <span className="block font-medium">
+                  {inmueble.direccion}
+                  {ubicacion && <span className="font-normal text-muted-foreground"> · {ubicacion}</span>}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {inmueble.localidad}
+                  {inmueble.bloque && (
+                    <>
+                      {" · "}
+                      <Link
+                        href={`/bloques/${inmueble.bloque.id}`}
+                        className={cn(ENLACE_INTERIOR, "underline-offset-4 hover:text-primary hover:underline")}
+                      >
+                        Bloque {formatBloque(inmueble.bloque)}
+                      </Link>
+                    </>
+                  )}
+                </span>
+              </TableCell>
+              <TableCell>
+                <span className="block">{TIPO_INMUEBLE_LABELS[inmueble.tipoInmueble]}</span>
+                <span className="block text-xs text-muted-foreground">
+                  {TIPO_OPERACION_LABELS[inmueble.tipoOperacion]}
+                </span>
+              </TableCell>
+              <TableCell className="text-right font-medium">
+                {formatoPrecio.format(Number(inmueble.precio))}
+              </TableCell>
+              <TableCell>
+                <EstadoBadge estado={inmueble.estado} />
+              </TableCell>
+              <TableCell>
+                <OcupacionBadge ocupacion={inmueble.ocupacion} />
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                <UltimoContacto fecha={inmueble.fechaUltimoContacto} />
+              </TableCell>
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
   );

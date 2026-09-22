@@ -3,10 +3,20 @@
 import { useRef, useTransition } from "react";
 import { toast } from "sonner";
 
-import { crearContacto } from "@/lib/actions/contactos";
 import { Button } from "@/components/ui/button";
 
-export function ContactoForm({ clienteId }: { clienteId: string }) {
+/**
+ * Note composer shared by client and property histories. The caller decides
+ * where the note goes via `registrar`; `children` renders extra fields
+ * (e.g. «Persona contactada») above the note, so they are set before submitting.
+ */
+export function ContactoForm({
+  registrar,
+  children,
+}: {
+  registrar: (data: { nota: string }) => Promise<{ success: boolean }>;
+  children?: React.ReactNode;
+}) {
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -18,7 +28,7 @@ export function ContactoForm({ clienteId }: { clienteId: string }) {
     }
 
     startTransition(async () => {
-      const result = await crearContacto(clienteId, { nota });
+      const result = await registrar({ nota });
       if (!result.success) {
         toast.error("No se pudo registrar el contacto.");
         return;
@@ -29,38 +39,41 @@ export function ContactoForm({ clienteId }: { clienteId: string }) {
   }
 
   return (
-    <form
-      ref={formRef}
-      action={handleSubmit}
-      className="overflow-hidden rounded-xl border border-input bg-card shadow-[0_1px_1px_oklch(0.35_0.03_80/0.04)] transition-[border-color,box-shadow] duration-200 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/40"
-    >
-      <label htmlFor="nota" className="sr-only">
-        Nota del contacto
-      </label>
-      <textarea
-        id="nota"
-        name="nota"
-        placeholder="¿Qué se habló? Interés, objeciones, próximos pasos…"
-        rows={3}
-        required
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            formRef.current?.requestSubmit();
-          }
-        }}
-        className="field-sizing-content block min-h-20 w-full resize-none bg-transparent px-4 pt-3 pb-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
-      />
-      <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-surface/50 px-3 py-2">
-        <span className="hidden text-xs text-muted-foreground sm:inline">
-          <kbd className="rounded border border-border bg-card px-1 font-sans text-[0.7rem]">Ctrl</kbd>{" "}
-          + <kbd className="rounded border border-border bg-card px-1 font-sans text-[0.7rem]">Enter</kbd>{" "}
-          para guardar
-        </span>
-        <Button type="submit" size="sm" disabled={isPending} className="ml-auto">
-          {isPending ? "Guardando…" : "Registrar contacto"}
-        </Button>
-      </div>
-    </form>
+    <div className="flex flex-col gap-4">
+      {children}
+      <form
+        ref={formRef}
+        action={handleSubmit}
+        className="overflow-hidden rounded-xl border border-input bg-card shadow-[0_1px_1px_oklch(0.35_0.03_80/0.04)] transition-[border-color,box-shadow] duration-200 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/40"
+      >
+        <label htmlFor="nota" className="sr-only">
+          Nota del contacto
+        </label>
+        <textarea
+          id="nota"
+          name="nota"
+          placeholder="¿Qué se habló? Interés, objeciones, próximos pasos…"
+          rows={3}
+          required
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              formRef.current?.requestSubmit();
+            }
+          }}
+          className="field-sizing-content block min-h-20 w-full resize-none bg-transparent px-4 pt-3 pb-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
+        />
+        <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-surface/50 px-3 py-2">
+          <span className="hidden text-xs text-muted-foreground sm:inline">
+            <kbd className="rounded border border-border bg-card px-1 font-sans text-[0.7rem]">Ctrl</kbd>{" "}
+            + <kbd className="rounded border border-border bg-card px-1 font-sans text-[0.7rem]">Enter</kbd>{" "}
+            para guardar
+          </span>
+          <Button type="submit" size="sm" disabled={isPending} className="ml-auto">
+            {isPending ? "Guardando…" : "Registrar contacto"}
+          </Button>
+        </div>
+      </form>
+    </div>
   );
 }

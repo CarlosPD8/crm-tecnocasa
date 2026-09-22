@@ -1,5 +1,5 @@
-// Datos de demostración (Granada capital). BORRA todos los clientes, inmuebles,
-// contactos, intereses, operaciones y registros de archivos antes de insertar.
+// Datos de demostración (Granada capital). BORRA todos los bloques, clientes,
+// inmuebles, contactos, intereses, operaciones y registros de archivos antes de insertar.
 // Uso: npx prisma db seed
 //
 // Las fechas son relativas a hoy, así que la demo tiene sentido cualquier día:
@@ -12,6 +12,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../lib/generated/prisma/client";
 import type {
   EstadoInmueble,
+  Ocupacion,
   TipoCliente,
   TipoInmueble,
   TipoOperacion,
@@ -29,9 +30,41 @@ function dia(dias: number, hora = 10, minuto = 0) {
   return d;
 }
 
+// ─── Bloques ─────────────────────────────────────────────────────────────────
+
+const BLOQUES = [
+  {
+    key: "estrellas",
+    calle: "C/ Estrellas",
+    numero: "22",
+    localidad: "Granada (Zaidín)",
+    nombre: "Edificio Las Estrellas",
+    codigoPostal: "18007",
+    notas: "Dos escaleras (izquierda y derecha), ascensor reformado en 2022. Presidenta de la comunidad: vecina del 3º A izquierda.",
+  },
+  {
+    key: "recogidas",
+    calle: "C/ Recogidas",
+    numero: "24",
+    localidad: "Granada (Centro)",
+    codigoPostal: "18005",
+    notas: "Garaje en sótano con acceso por C/ Puentezuelas.",
+  },
+  {
+    key: "salon",
+    calle: "Paseo del Salón",
+    numero: "12",
+    localidad: "Granada (Centro)",
+    nombre: "Edificio Genil",
+    codigoPostal: "18009",
+    notas: "Edificio señorial con portero de 8:00 a 15:00.",
+  },
+];
+
 // ─── Clientes ────────────────────────────────────────────────────────────────
 // Cubre los 4 tipos, contactos vencidos / hoy / próximos / sin fecha,
 // y fichas con datos incompletos (sin email, sin teléfono, sin dirección).
+// Un contacto con `ref` trata sobre ese inmueble y aparece en ambos historiales.
 
 type ClienteSeed = {
   key: string;
@@ -43,7 +76,7 @@ type ClienteSeed = {
   direccion?: string;
   notas?: string;
   proximo?: number; // días desde hoy
-  contactos?: { dias: number; nota: string }[];
+  contactos?: { dias: number; nota: string; ref?: string }[];
 };
 
 const CLIENTES: ClienteSeed[] = [
@@ -59,7 +92,7 @@ const CLIENTES: ClienteSeed[] = [
     proximo: -3,
     contactos: [
       { dias: -18, nota: "Primera llamada. Le interesan pisos con ascensor y buena conexión con el metro." },
-      { dias: -9, nota: "Visita al piso de Recogidas. Le gusta, pero ve la cocina pequeña." },
+      { dias: -9, nota: "Visita al piso de Recogidas. Le gusta, pero ve la cocina pequeña.", ref: "GR-2401" },
       { dias: -3, nota: "Quedamos en llamarla hoy con la respuesta del propietario sobre la contraoferta." },
     ],
   },
@@ -73,7 +106,7 @@ const CLIENTES: ClienteSeed[] = [
     notas: "Inversor. Compra para alquilar a estudiantes. Prefiere pisos cerca de Fuentenueva o locales en el centro.",
     proximo: -1,
     contactos: [
-      { dias: -12, nota: "Pide rentabilidad estimada del local de C/ San Juan de Dios." },
+      { dias: -12, nota: "Pide rentabilidad estimada del local de C/ San Juan de Dios.", ref: "GR-2404" },
       { dias: -1, nota: "Le envío el estudio de rentabilidad. Pendiente de respuesta." },
     ],
   },
@@ -87,8 +120,8 @@ const CLIENTES: ClienteSeed[] = [
     notas: "Trabaja en el Parque Tecnológico de la Salud. Busca alquiler hasta 800 €/mes, con mascota (perro pequeño).",
     proximo: 0,
     contactos: [
-      { dias: -6, nota: "Descarta el ático del Realejo por no admitir mascotas." },
-      { dias: -2, nota: "Interesada en el piso del Zaidín. Visita programada para hoy." },
+      { dias: -6, nota: "Descarta el ático del Realejo por no admitir mascotas.", ref: "GR-2403" },
+      { dias: -2, nota: "Interesada en el piso de C/ Estrellas. Visita programada para hoy.", ref: "GR-2405" },
     ],
   },
   {
@@ -103,7 +136,7 @@ const CLIENTES: ClienteSeed[] = [
     proximo: 0,
     contactos: [
       { dias: -30, nota: "Firma de la nota de encargo en exclusiva de los dos inmuebles." },
-      { dias: -4, nota: "Le informo de dos visitas al chalet esta semana. Acepta bajar a 400.000 € si hace falta." },
+      { dias: -4, nota: "Le informo de dos visitas al chalet esta semana. Acepta bajar a 400.000 € si hace falta.", ref: "GR-2402" },
     ],
   },
   {
@@ -124,11 +157,11 @@ const CLIENTES: ClienteSeed[] = [
     tipo: "PROPIETARIO",
     telefono: "656 114 972",
     direccion: "C/ Palencia 20, 1ºB, Granada",
-    notas: "Tiene tres pisos en alquiler con nosotros (Zaidín, Chana y Beiro). Cobro por transferencia el día 5.",
+    notas: "Tiene tres pisos en el Edificio Las Estrellas (C/ Estrellas 22). Cobro por transferencia el día 5. Se plantea vender alguno.",
     proximo: 2,
     contactos: [
       { dias: -40, nota: "Renovación del encargo de gestión de los alquileres." },
-      { dias: -8, nota: "Avisa de una avería en el calentador del piso de la Chana." },
+      { dias: -8, nota: "Avisa de una avería en el calentador del 3º C derecha.", ref: "GR-2409" },
     ],
   },
   {
@@ -142,8 +175,8 @@ const CLIENTES: ClienteSeed[] = [
     notas: "Compró el piso de Pedro Antonio de Alarcón. Posible interés futuro en una plaza de garaje.",
     proximo: 14,
     contactos: [
-      { dias: -26, nota: "Firma de arras del piso de Pedro Antonio de Alarcón." },
-      { dias: -11, nota: "Firma en notaría. Entrega de llaves." },
+      { dias: -26, nota: "Firma de arras del piso de Pedro Antonio de Alarcón.", ref: "GR-2415" },
+      { dias: -11, nota: "Firma en notaría. Entrega de llaves.", ref: "GR-2415" },
     ],
   },
   {
@@ -155,7 +188,7 @@ const CLIENTES: ClienteSeed[] = [
     email: "fromero@example.com",
     notas: "Vende nave en el polígono de Almanjáyar. Precio negociable para venta rápida.",
     proximo: 4,
-    contactos: [{ dias: -15, nota: "Reportaje de fotos y medición de la nave." }],
+    contactos: [{ dias: -15, nota: "Reportaje de fotos y medición de la nave.", ref: "GR-2407" }],
   },
   {
     key: "isabel",
@@ -164,8 +197,8 @@ const CLIENTES: ClienteSeed[] = [
     tipo: "INQUILINO",
     telefono: "675 093 664",
     email: "isabel.cano@example.com",
-    notas: "Alquiló el piso de la Chana. Contrato de un año con prórroga.",
-    contactos: [{ dias: -22, nota: "Firma del contrato de alquiler y entrega de fianza." }],
+    notas: "Alquiló el 1º B izquierda de C/ Estrellas 22. Contrato de un año con prórroga.",
+    contactos: [{ dias: -22, nota: "Firma del contrato de alquiler y entrega de fianza.", ref: "GR-2418" }],
   },
   {
     key: "david",
@@ -177,7 +210,7 @@ const CLIENTES: ClienteSeed[] = [
     proximo: 1,
     contactos: [
       { dias: -7, nota: "Le paso fichas de dos casas: carmen en San Miguel Bajo y casa en el Realejo." },
-      { dias: -3, nota: "Visita al carmen del Albaicín. Quiere volver con su pareja." },
+      { dias: -3, nota: "Visita al carmen del Albaicín. Quiere volver con su pareja.", ref: "GR-2406" },
     ],
   },
   {
@@ -190,7 +223,7 @@ const CLIENTES: ClienteSeed[] = [
     direccion: "C/ Santa Escolástica 9, Granada",
     notas: "Propietaria del ático del Realejo y de dos plazas de garaje. Quiere inquilinos con nómina.",
     proximo: 7,
-    contactos: [{ dias: -10, nota: "Acepta rebajar el ático a 950 €/mes si el contrato es de dos años." }],
+    contactos: [{ dias: -10, nota: "Acepta rebajar el ático a 950 €/mes si el contrato es de dos años.", ref: "GR-2403" }],
   },
   {
     key: "sergio",
@@ -201,8 +234,8 @@ const CLIENTES: ClienteSeed[] = [
     notas: "Sin teléfono. Solo contacto por email. Reservó el piso del Paseo del Salón.",
     proximo: 10,
     contactos: [
-      { dias: -14, nota: "Visita al piso del Paseo del Salón. Hace oferta de 265.000 €." },
-      { dias: -6, nota: "Oferta aceptada. Firma de la reserva con 6.000 €." },
+      { dias: -14, nota: "Visita al piso del Paseo del Salón. Hace oferta de 265.000 €.", ref: "GR-2412" },
+      { dias: -6, nota: "Oferta aceptada. Firma de la reserva con 6.000 €.", ref: "GR-2412" },
     ],
   },
   {
@@ -213,7 +246,7 @@ const CLIENTES: ClienteSeed[] = [
     telefono: "691 245 870",
     email: "ana.prieto@example.com",
     notas: "Alquiló el local de C/ Navas para su clínica de fisioterapia.",
-    contactos: [{ dias: -65, nota: "Firma del contrato del local. Carencia de un mes por obras." }],
+    contactos: [{ dias: -65, nota: "Firma del contrato del local. Carencia de un mes por obras.", ref: "GR-2419" }],
   },
   {
     key: "jose",
@@ -223,7 +256,7 @@ const CLIENTES: ClienteSeed[] = [
     telefono: "652 903 117",
     direccion: "C/ Poeta Manuel de Góngora 6, Granada",
     notas: "Vende parcela en el Camino de Purchil. Herencia de tres hermanos: firma él en su nombre.",
-    contactos: [{ dias: -35, nota: "Recibida la autorización firmada por los tres hermanos." }],
+    contactos: [{ dias: -35, nota: "Recibida la autorización firmada por los tres hermanos.", ref: "GR-2408" }],
   },
   {
     key: "marta",
@@ -234,8 +267,8 @@ const CLIENTES: ClienteSeed[] = [
     email: "marta.iglesias@example.com",
     notas: "Compró la casa de Cervantes hace dos meses. Buena candidata para recomendar la agencia.",
     contactos: [
-      { dias: -95, nota: "Primera visita a la casa." },
-      { dias: -80, nota: "Firma en notaría de la casa de Cervantes." },
+      { dias: -95, nota: "Primera visita a la casa.", ref: "GR-2416" },
+      { dias: -80, nota: "Firma en notaría de la casa de Cervantes.", ref: "GR-2416" },
     ],
   },
   {
@@ -267,7 +300,7 @@ const CLIENTES: ClienteSeed[] = [
     direccion: "C/ Periodista Daniel Saucedo Aranda 3, Granada",
     notas: "Busca garaje cerca de su casa en el Centro. Reservó una plaza y alquila otra.",
     proximo: 3,
-    contactos: [{ dias: -4, nota: "Reserva de la plaza de garaje de Recogidas con 1.000 €." }],
+    contactos: [{ dias: -4, nota: "Reserva de la plaza de garaje de Recogidas con 1.000 €.", ref: "GR-2413" }],
   },
   {
     key: "nuria",
@@ -288,8 +321,36 @@ const CLIENTES: ClienteSeed[] = [
   },
 ];
 
+// DNI/NIE ficticios (sin letra: se calcula la de control para que sean válidos).
+// Algunos clientes no tienen, a propósito.
+const DNIS: Record<string, string> = {
+  lucia: "74638215",
+  javier: "24587309",
+  carmen: "X4829163",
+  antonio: "23914576",
+  rocio: "75123840",
+  manuel: "24190337",
+  elena: "74902618",
+  francisco: "23675104",
+  isabel: "76014592",
+  pilar: "24338761",
+  sergio: "52917046",
+  ana: "75560213",
+  jose: "23801459",
+  marta: "74215987",
+  teresa: "24476120",
+  alberto: "76239845",
+};
+
+function conLetra(base: string) {
+  const numero = Number(base.replace("X", "0").replace("Y", "1").replace("Z", "2"));
+  return base + "TRWAGMYFPDXBNJZSQVHLCKE"[numero % 23];
+}
+
 // ─── Inmuebles ───────────────────────────────────────────────────────────────
-// Cubre los 9 tipos, venta y alquiler, los 4 estados, con y sin propietario.
+// Cubre los 9 tipos, venta y alquiler, los 4 estados, con y sin propietario,
+// en bloque o sueltos, las tres ocupaciones más «Sin datos» (null) y
+// adquisiciones potenciales (propietarios que alquilan y podrían vender).
 
 type InmuebleSeed = {
   ref: string;
@@ -305,29 +366,47 @@ type InmuebleSeed = {
   propietario?: string; // key de cliente
   descripcion?: string;
   creado: number; // días desde hoy
+  bloque?: string; // key de bloque
+  escalera?: string;
+  planta?: number;
+  puerta?: string;
+  ocupacion: Ocupacion | null;
+  potencial?: boolean;
 };
 
 const INMUEBLES: InmuebleSeed[] = [
-  { ref: "GR-2401", direccion: "C/ Recogidas 24, 3ºB", localidad: "Granada (Centro)", tipo: "PISO", operacion: "VENTA", precio: 238000, m2: 98, hab: 3, banos: 2, estado: "DISPONIBLE", propietario: "antonio", creado: -40, descripcion: "Piso exterior con ascensor, 3 dormitorios y 2 baños. Cocina amueblada y trastero. A un paso del metro y de Puerta Real." },
-  { ref: "GR-2402", direccion: "Carretera de la Sierra 41", localidad: "Granada (Genil)", tipo: "CHALET", operacion: "VENTA", precio: 420000, m2: 260, hab: 5, banos: 3, estado: "DISPONIBLE", propietario: "antonio", creado: -30, descripcion: "Chalet independiente con piscina y vistas a Sierra Nevada. Parcela de 700 m² y garaje para dos coches." },
-  { ref: "GR-2403", direccion: "C/ Santa Escolástica 9, ático", localidad: "Granada (Realejo)", tipo: "ATICO", operacion: "ALQUILER", precio: 980, m2: 80, hab: 2, banos: 1, estado: "DISPONIBLE", propietario: "pilar", creado: -12, descripcion: "Ático con terraza de 30 m² y vistas a la Alhambra. No se admiten mascotas." },
-  { ref: "GR-2404", direccion: "C/ San Juan de Dios 38, bajo", localidad: "Granada (Centro)", tipo: "LOCAL", operacion: "VENTA", precio: 185000, m2: 115, banos: 1, estado: "DISPONIBLE", propietario: "teresa", creado: -25, descripcion: "Local diáfano a pie de calle junto a la universidad, con escaparate de 7 metros. Ideal para hostelería o academia." },
-  { ref: "GR-2405", direccion: "C/ Palencia 20, 4ºA", localidad: "Granada (Zaidín)", tipo: "PISO", operacion: "ALQUILER", precio: 750, m2: 85, hab: 3, banos: 1, estado: "DISPONIBLE", propietario: "manuel", creado: -9, descripcion: "Piso reformado y amueblado junto al Parque Tecnológico. Admite mascotas pequeñas." },
-  { ref: "GR-2406", direccion: "Placeta de San Miguel Bajo 5", localidad: "Granada (Albaicín)", tipo: "CASA", operacion: "VENTA", precio: 310000, m2: 170, hab: 4, banos: 2, estado: "DISPONIBLE", propietario: "nuria", creado: -20, descripcion: "Carmen tradicional con jardín y aljibe. Vistas a la Alhambra desde la terraza. Necesita reforma parcial." },
-  { ref: "GR-2407", direccion: "Polígono de Almanjáyar, nave 14", localidad: "Granada (Norte)", tipo: "NAVE", operacion: "VENTA", precio: 245000, m2: 520, banos: 1, estado: "DISPONIBLE", propietario: "francisco", creado: -15, descripcion: "Nave industrial con altura de 8 m, puerta para camiones y oficina en entreplanta. Acceso directo a la circunvalación." },
-  { ref: "GR-2408", direccion: "Camino de Purchil, parcela 22", localidad: "Granada (Vega)", tipo: "TERRENO", operacion: "VENTA", precio: 95000, m2: 4800, estado: "DISPONIBLE", propietario: "jose", creado: -35, descripcion: "Parcela en la Vega con pozo propio y acceso por camino asfaltado. Uso agrícola." },
-  { ref: "GR-2409", direccion: "C/ Andrés Segovia 60, 2ºC", localidad: "Granada (Chana)", tipo: "PISO", operacion: "ALQUILER", precio: 690, m2: 80, hab: 3, banos: 1, estado: "DISPONIBLE", propietario: "manuel", creado: -6, descripcion: "Piso luminoso junto a la parada de metro. Calefacción y aire acondicionado." },
-  { ref: "GR-2410", direccion: "Gran Vía de Colón 22, oficina 3", localidad: "Granada (Centro)", tipo: "OFICINA", operacion: "ALQUILER", precio: 890, m2: 70, banos: 1, estado: "DISPONIBLE", propietario: "teresa", creado: -18, descripcion: "Oficina con dos despachos y sala de reuniones en edificio histórico. Fibra instalada." },
-  { ref: "GR-2411", direccion: "C/ Cuesta del Pescado 7", localidad: "Granada (Realejo)", tipo: "CASA", operacion: "VENTA", precio: 265000, m2: 140, hab: 3, banos: 2, estado: "DISPONIBLE", creado: -3, descripcion: "Casa de tres plantas con patio interior. Para entrar a vivir." },
-  { ref: "GR-2412", direccion: "Paseo del Salón 12, 1º", localidad: "Granada (Centro)", tipo: "PISO", operacion: "VENTA", precio: 272000, m2: 110, hab: 3, banos: 2, estado: "RESERVADO", creado: -28, descripcion: "Piso señorial frente al río Genil, en edificio con portero. Reservado con arras pendientes de firma." },
-  { ref: "GR-2413", direccion: "C/ Recogidas 50, plaza 7", localidad: "Granada (Centro)", tipo: "GARAJE", operacion: "VENTA", precio: 24000, m2: 12, estado: "RESERVADO", propietario: "pilar", creado: -16, descripcion: "Plaza de garaje amplia en el centro, fácil maniobra." },
-  { ref: "GR-2414", direccion: "C/ Periodista Eugenio Selles 8, 2ºD", localidad: "Granada (Ronda)", tipo: "PISO", operacion: "ALQUILER", precio: 650, m2: 65, hab: 2, banos: 1, estado: "RESERVADO", creado: -8, descripcion: "Piso de 2 dormitorios cerca de Fuentenueva, ideal para estudiantes o parejas." },
-  { ref: "GR-2415", direccion: "C/ Pedro Antonio de Alarcón 33, 4ºA", localidad: "Granada (Ronda)", tipo: "PISO", operacion: "VENTA", precio: 205000, m2: 102, hab: 3, banos: 2, estado: "VENDIDO", creado: -60, descripcion: "Piso con terraza en una de las calles más animadas. Vendido." },
-  { ref: "GR-2416", direccion: "Avda. de Cervantes 40", localidad: "Granada (Genil)", tipo: "CASA", operacion: "VENTA", precio: 385000, m2: 220, hab: 4, banos: 3, estado: "VENDIDO", creado: -120, descripcion: "Casa adosada con jardín en zona residencial. Vendida." },
-  { ref: "GR-2417", direccion: "C/ Joaquina Eguaras 3, solar", localidad: "Granada (Beiro)", tipo: "TERRENO", operacion: "VENTA", precio: 120000, m2: 380, estado: "VENDIDO", creado: -140, descripcion: "Solar urbano con licencia para edificio de viviendas. Vendido." },
-  { ref: "GR-2418", direccion: "C/ Andrés Segovia 14, 3ºB", localidad: "Granada (Chana)", tipo: "PISO", operacion: "ALQUILER", precio: 640, m2: 75, hab: 2, banos: 1, estado: "ALQUILADO", propietario: "manuel", creado: -50, descripcion: "Piso amueblado junto al metro. Alquilado." },
-  { ref: "GR-2419", direccion: "C/ Navas 17, bajo", localidad: "Granada (Centro)", tipo: "LOCAL", operacion: "ALQUILER", precio: 1100, m2: 90, banos: 1, estado: "ALQUILADO", propietario: "teresa", creado: -90, descripcion: "Local adaptado para consulta en calle peatonal. Alquilado a clínica de fisioterapia." },
-  { ref: "GR-2420", direccion: "Plaza de Gracia 4, plaza 15", localidad: "Granada (Centro)", tipo: "GARAJE", operacion: "ALQUILER", precio: 95, m2: 11, estado: "ALQUILADO", propietario: "pilar", creado: -70, descripcion: "Plaza de garaje en alquiler mensual. Alquilada." },
+  { ref: "GR-2401", direccion: "C/ Recogidas 24", localidad: "Granada (Centro)", bloque: "recogidas", planta: 3, puerta: "B", tipo: "PISO", operacion: "VENTA", precio: 238000, m2: 98, hab: 3, banos: 2, estado: "DISPONIBLE", propietario: "antonio", ocupacion: "VACIO", creado: -40, descripcion: "Piso exterior con ascensor, 3 dormitorios y 2 baños. Cocina amueblada y trastero. A un paso del metro y de Puerta Real." },
+  { ref: "GR-2402", direccion: "Carretera de la Sierra 41", localidad: "Granada (Genil)", tipo: "CHALET", operacion: "VENTA", precio: 420000, m2: 260, hab: 5, banos: 3, estado: "DISPONIBLE", propietario: "antonio", ocupacion: "PROPIETARIO", creado: -30, descripcion: "Chalet independiente con piscina y vistas a Sierra Nevada. Parcela de 700 m² y garaje para dos coches." },
+  { ref: "GR-2403", direccion: "C/ Santa Escolástica 9, ático", localidad: "Granada (Realejo)", tipo: "ATICO", operacion: "ALQUILER", precio: 980, m2: 80, hab: 2, banos: 1, estado: "DISPONIBLE", propietario: "pilar", ocupacion: "VACIO", creado: -12, descripcion: "Ático con terraza de 30 m² y vistas a la Alhambra. No se admiten mascotas." },
+  { ref: "GR-2404", direccion: "C/ San Juan de Dios 38, bajo", localidad: "Granada (Centro)", tipo: "LOCAL", operacion: "VENTA", precio: 185000, m2: 115, banos: 1, estado: "DISPONIBLE", propietario: "teresa", ocupacion: "VACIO", creado: -25, descripcion: "Local diáfano a pie de calle junto a la universidad, con escaparate de 7 metros. Ideal para hostelería o academia." },
+  { ref: "GR-2405", direccion: "C/ Estrellas 22", localidad: "Granada (Zaidín)", bloque: "estrellas", escalera: "Izquierda", planta: 4, puerta: "A", tipo: "PISO", operacion: "ALQUILER", precio: 750, m2: 85, hab: 3, banos: 1, estado: "DISPONIBLE", propietario: "manuel", ocupacion: "VACIO", potencial: true, creado: -9, descripcion: "Piso reformado y amueblado junto al Parque Tecnológico. Admite mascotas pequeñas." },
+  { ref: "GR-2406", direccion: "Placeta de San Miguel Bajo 5", localidad: "Granada (Albaicín)", tipo: "CASA", operacion: "VENTA", precio: 310000, m2: 170, hab: 4, banos: 2, estado: "DISPONIBLE", propietario: "nuria", ocupacion: "VACIO", creado: -20, descripcion: "Carmen tradicional con jardín y aljibe. Vistas a la Alhambra desde la terraza. Necesita reforma parcial." },
+  { ref: "GR-2407", direccion: "Polígono de Almanjáyar, nave 14", localidad: "Granada (Norte)", tipo: "NAVE", operacion: "VENTA", precio: 245000, m2: 520, banos: 1, estado: "DISPONIBLE", propietario: "francisco", ocupacion: null, creado: -15, descripcion: "Nave industrial con altura de 8 m, puerta para camiones y oficina en entreplanta. Acceso directo a la circunvalación." },
+  { ref: "GR-2408", direccion: "Camino de Purchil, parcela 22", localidad: "Granada (Vega)", tipo: "TERRENO", operacion: "VENTA", precio: 95000, m2: 4800, estado: "DISPONIBLE", propietario: "jose", ocupacion: null, creado: -35, descripcion: "Parcela en la Vega con pozo propio y acceso por camino asfaltado. Uso agrícola." },
+  { ref: "GR-2409", direccion: "C/ Estrellas 22", localidad: "Granada (Zaidín)", bloque: "estrellas", escalera: "Derecha", planta: 3, puerta: "C", tipo: "PISO", operacion: "ALQUILER", precio: 690, m2: 80, hab: 3, banos: 1, estado: "DISPONIBLE", propietario: "manuel", ocupacion: "VACIO", potencial: true, creado: -6, descripcion: "Piso luminoso, exterior. Calefacción y aire acondicionado." },
+  { ref: "GR-2410", direccion: "Gran Vía de Colón 22, oficina 3", localidad: "Granada (Centro)", tipo: "OFICINA", operacion: "ALQUILER", precio: 890, m2: 70, banos: 1, estado: "DISPONIBLE", propietario: "teresa", ocupacion: "VACIO", creado: -18, descripcion: "Oficina con dos despachos y sala de reuniones en edificio histórico. Fibra instalada." },
+  { ref: "GR-2411", direccion: "C/ Cuesta del Pescado 7", localidad: "Granada (Realejo)", tipo: "CASA", operacion: "VENTA", precio: 265000, m2: 140, hab: 3, banos: 2, estado: "DISPONIBLE", ocupacion: null, creado: -3, descripcion: "Casa de tres plantas con patio interior. Para entrar a vivir." },
+  { ref: "GR-2412", direccion: "Paseo del Salón 12", localidad: "Granada (Centro)", bloque: "salon", planta: 1, puerta: "Izq", tipo: "PISO", operacion: "VENTA", precio: 272000, m2: 110, hab: 3, banos: 2, estado: "RESERVADO", ocupacion: "PROPIETARIO", creado: -28, descripcion: "Piso señorial frente al río Genil, en edificio con portero. Reservado con arras pendientes de firma." },
+  { ref: "GR-2413", direccion: "C/ Recogidas 24", localidad: "Granada (Centro)", bloque: "recogidas", planta: -1, puerta: "Plaza 7", tipo: "GARAJE", operacion: "VENTA", precio: 24000, m2: 12, estado: "RESERVADO", propietario: "pilar", ocupacion: "VACIO", creado: -16, descripcion: "Plaza de garaje amplia en el sótano del edificio, fácil maniobra." },
+  { ref: "GR-2414", direccion: "C/ Estrellas 22", localidad: "Granada (Zaidín)", bloque: "estrellas", escalera: "Derecha", planta: 2, puerta: "D", tipo: "PISO", operacion: "ALQUILER", precio: 650, m2: 65, hab: 2, banos: 1, estado: "RESERVADO", ocupacion: "VACIO", creado: -8, descripcion: "Piso de 2 dormitorios, ideal para estudiantes o parejas." },
+  { ref: "GR-2415", direccion: "C/ Pedro Antonio de Alarcón 33, 4ºA", localidad: "Granada (Ronda)", tipo: "PISO", operacion: "VENTA", precio: 205000, m2: 102, hab: 3, banos: 2, estado: "VENDIDO", ocupacion: "PROPIETARIO", creado: -60, descripcion: "Piso con terraza en una de las calles más animadas. Vendido." },
+  { ref: "GR-2416", direccion: "Avda. de Cervantes 40", localidad: "Granada (Genil)", tipo: "CASA", operacion: "VENTA", precio: 385000, m2: 220, hab: 4, banos: 3, estado: "VENDIDO", ocupacion: "PROPIETARIO", creado: -120, descripcion: "Casa adosada con jardín en zona residencial. Vendida." },
+  { ref: "GR-2417", direccion: "C/ Joaquina Eguaras 3, solar", localidad: "Granada (Beiro)", tipo: "TERRENO", operacion: "VENTA", precio: 120000, m2: 380, estado: "VENDIDO", ocupacion: null, creado: -140, descripcion: "Solar urbano con licencia para edificio de viviendas. Vendido." },
+  { ref: "GR-2418", direccion: "C/ Estrellas 22", localidad: "Granada (Zaidín)", bloque: "estrellas", escalera: "Izquierda", planta: 1, puerta: "B", tipo: "PISO", operacion: "ALQUILER", precio: 640, m2: 75, hab: 2, banos: 1, estado: "ALQUILADO", propietario: "manuel", ocupacion: "INQUILINOS", potencial: true, creado: -50, descripcion: "Piso amueblado. Alquilado." },
+  { ref: "GR-2419", direccion: "C/ Navas 17, bajo", localidad: "Granada (Centro)", tipo: "LOCAL", operacion: "ALQUILER", precio: 1100, m2: 90, banos: 1, estado: "ALQUILADO", propietario: "teresa", ocupacion: "INQUILINOS", potencial: true, creado: -90, descripcion: "Local adaptado para consulta en calle peatonal. Alquilado a clínica de fisioterapia." },
+  { ref: "GR-2420", direccion: "Plaza de Gracia 4, plaza 15", localidad: "Granada (Centro)", tipo: "GARAJE", operacion: "ALQUILER", precio: 95, m2: 11, estado: "ALQUILADO", propietario: "pilar", ocupacion: "INQUILINOS", potencial: true, creado: -70, descripcion: "Plaza de garaje en alquiler mensual. Alquilada." },
+];
+
+// Contactos sobre un inmueble registrados desde su ficha (captación incluida).
+// `cliente` = persona con la que se habló; también aparece en su historial.
+const CONTACTOS_INMUEBLE: { ref: string; cliente?: string; dias: number; nota: string }[] = [
+  { ref: "GR-2418", cliente: "manuel", dias: -1, nota: "Manuel cuenta que la inquilina podría dejar el piso en verano. Si queda libre, se plantea venderlo. Volver a llamar en un mes." },
+  { ref: "GR-2409", cliente: "manuel", dias: -3, nota: "Pide una valoración para venta si no se alquila este mes. Le preparo un estudio de mercado del Zaidín." },
+  { ref: "GR-2405", dias: -15, nota: "Visita técnica: piso vacío y en buen estado. Faltan dos persianas por reparar." },
+  { ref: "GR-2419", cliente: "teresa", dias: -20, nota: "Teresa valora vender el local con la inquilina dentro. Rentabilidad actual en torno al 6,8 %." },
+  { ref: "GR-2420", cliente: "pilar", dias: -12, nota: "Pilar vendería la plaza si le llega una oferta por encima de 26.000 €." },
+  { ref: "GR-2401", cliente: "antonio", dias: -2, nota: "Consulta de bajada de precio: acepta 232.000 € si la compradora confirma esta semana." },
+  { ref: "GR-2411", dias: -3, nota: "Cartel de «Se vende» particular en la fachada. Dejamos tarjeta en el buzón para captarla." },
 ];
 
 // ─── Operaciones cerradas ────────────────────────────────────────────────────
@@ -365,35 +444,39 @@ const INTERESES: { cliente: string; ref: string; dias: number }[] = [
 
 async function main() {
   console.log("Borrando datos existentes…");
-  // Orden por claves foráneas: primero lo que depende de clientes e inmuebles.
+  // Orden por claves foráneas: primero lo que depende de clientes, inmuebles y bloques.
   await prisma.$transaction([
     prisma.operacion.deleteMany(),
     prisma.interes.deleteMany(),
     prisma.archivo.deleteMany(),
     prisma.contacto.deleteMany(),
     prisma.inmueble.deleteMany(),
+    prisma.bloque.deleteMany(),
     prisma.cliente.deleteMany(),
   ]);
+
+  console.log("Creando bloques…");
+  const bloqueId = new Map<string, string>();
+  for (const { key, ...data } of BLOQUES) {
+    const bloque = await prisma.bloque.create({ data });
+    bloqueId.set(key, bloque.id);
+  }
 
   console.log("Creando clientes…");
   const clienteId = new Map<string, string>();
   for (const [i, c] of CLIENTES.entries()) {
-    const contactos = (c.contactos ?? []).map((ct, j) => ({ fecha: dia(ct.dias, 9 + j * 2, 15 + i), nota: ct.nota }));
-    const ultimo = contactos.reduce<Date | null>((max, ct) => (!max || ct.fecha > max ? ct.fecha : max), null);
-
     const cliente = await prisma.cliente.create({
       data: {
         nombre: c.nombre,
         apellidos: c.apellidos,
+        dni: DNIS[c.key] ? conLetra(DNIS[c.key]) : null,
         tipoCliente: c.tipo,
         telefono: c.telefono ?? null,
         email: c.email ?? null,
         direccion: c.direccion ?? null,
         notas: c.notas ?? null,
-        fechaUltimoContacto: ultimo,
         fechaProximoContacto: c.proximo === undefined ? null : dia(c.proximo, 12),
         createdAt: dia(-150 + i * 6),
-        contactos: { create: contactos },
       },
     });
     clienteId.set(c.key, cliente.id);
@@ -416,11 +499,50 @@ async function main() {
         descripcion: inm.descripcion ?? null,
         estado: inm.estado,
         propietarioId: inm.propietario ? clienteId.get(inm.propietario)! : null,
+        bloqueId: inm.bloque ? bloqueId.get(inm.bloque)! : null,
+        escalera: inm.escalera ?? null,
+        planta: inm.planta ?? null,
+        puerta: inm.puerta ?? null,
+        ocupacion: inm.ocupacion,
+        adquisicionPotencial: inm.potencial ?? false,
         createdAt: dia(inm.creado),
       },
     });
     inmuebleId.set(inm.ref, creado.id);
   }
+
+  console.log("Creando contactos…");
+  const contactos = [
+    ...CLIENTES.flatMap((c, i) =>
+      (c.contactos ?? []).map((ct, j) => ({
+        clienteId: clienteId.get(c.key)!,
+        inmuebleId: ct.ref ? inmuebleId.get(ct.ref)! : null,
+        fecha: dia(ct.dias, 9 + j * 2, 15 + i),
+        nota: ct.nota,
+      }))
+    ),
+    ...CONTACTOS_INMUEBLE.map((ct, i) => ({
+      clienteId: ct.cliente ? clienteId.get(ct.cliente)! : null,
+      inmuebleId: inmuebleId.get(ct.ref)!,
+      fecha: dia(ct.dias, 17, 5 + i * 7),
+      nota: ct.nota,
+    })),
+  ];
+  await prisma.contacto.createMany({ data: contactos });
+
+  // «Último contacto» = latest note on each client / property, so both always match history.
+  const [ultimoCliente, ultimoInmueble] = await Promise.all([
+    prisma.contacto.groupBy({ by: ["clienteId"], where: { clienteId: { not: null } }, _max: { fecha: true } }),
+    prisma.contacto.groupBy({ by: ["inmuebleId"], where: { inmuebleId: { not: null } }, _max: { fecha: true } }),
+  ]);
+  await prisma.$transaction([
+    ...ultimoCliente.map((r) =>
+      prisma.cliente.update({ where: { id: r.clienteId! }, data: { fechaUltimoContacto: r._max.fecha } })
+    ),
+    ...ultimoInmueble.map((r) =>
+      prisma.inmueble.update({ where: { id: r.inmuebleId! }, data: { fechaUltimoContacto: r._max.fecha } })
+    ),
+  ]);
 
   console.log("Creando operaciones e intereses…");
   for (const op of OPERACIONES) {
@@ -446,14 +568,27 @@ async function main() {
     })),
   });
 
-  const [clientes, inmuebles, contactos, intereses, operaciones] = await Promise.all([
-    prisma.cliente.count(),
-    prisma.inmueble.count(),
-    prisma.contacto.count(),
-    prisma.interes.count(),
-    prisma.operacion.count(),
-  ]);
-  console.log({ clientes, inmuebles, contactos, intereses, operaciones });
+  const [bloques, clientes, inmuebles, contactosTotal, deInmueble, potenciales, intereses, operaciones] =
+    await Promise.all([
+      prisma.bloque.count(),
+      prisma.cliente.count(),
+      prisma.inmueble.count(),
+      prisma.contacto.count(),
+      prisma.contacto.count({ where: { inmuebleId: { not: null } } }),
+      prisma.inmueble.count({ where: { adquisicionPotencial: true } }),
+      prisma.interes.count(),
+      prisma.operacion.count(),
+    ]);
+  console.log({
+    bloques,
+    clientes,
+    inmuebles,
+    contactos: contactosTotal,
+    contactosSobreInmueble: deInmueble,
+    potenciales,
+    intereses,
+    operaciones,
+  });
 }
 
 main()
