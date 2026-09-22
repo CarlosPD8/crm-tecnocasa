@@ -120,3 +120,23 @@ export async function eliminarInmueble(id: string) {
   revalidarBloque(borrado.bloqueId);
   return { success: true as const };
 }
+
+export async function buscarInmuebles(query: string) {
+  await requireSession();
+
+  const q = query.trim();
+  if (!q) return [];
+
+  return prisma.inmueble.findMany({
+    where: {
+      OR: [
+        { referencia: { contains: q, mode: "insensitive" } },
+        { direccion: { contains: q, mode: "insensitive" } },
+        { localidad: { contains: q, mode: "insensitive" } },
+      ],
+    },
+    select: { id: true, referencia: true, direccion: true, localidad: true },
+    orderBy: { referencia: "asc" },
+    take: 10,
+  });
+}

@@ -442,10 +442,43 @@ const INTERESES: { cliente: string; ref: string; dias: number }[] = [
   { cliente: "marta", ref: "GR-2402", dias: -20 },
 ];
 
+// ─── Agenda ──────────────────────────────────────────────────────────────────
+// `dias` relativo a hoy; `duracion` en horas. Los de todo el día usan `diasTodoElDia`.
+
+const EVENTOS: {
+  titulo: string;
+  tipo: "VISITA" | "REUNION" | "LLAMADA" | "FIRMA" | "OTRO";
+  dias: number;
+  hora?: number;
+  duracion?: number;
+  diasTodoElDia?: number;
+  cliente?: string;
+  ref?: string;
+  notas?: string;
+}[] = [
+  { titulo: "Visita GR-2401 con Lucía", tipo: "VISITA", dias: 0, hora: 17.5, cliente: "lucia", ref: "GR-2401", notas: "Le interesa la terraza. Llevar nota simple." },
+  { titulo: "Reunión de oficina", tipo: "REUNION", dias: 1, hora: 9, notas: "Repaso de cartera semanal." },
+  { titulo: "Llamar a Antonio por la bajada de precio", tipo: "LLAMADA", dias: 1, hora: 12, duracion: 0.5, cliente: "antonio", ref: "GR-2402" },
+  { titulo: "Firma arras GR-2407", tipo: "FIRMA", dias: 2, hora: 11, duracion: 1.5, cliente: "francisco", ref: "GR-2407", notas: "Notaría Puerta Real. Confirmar con el comprador." },
+  { titulo: "Visita GR-2409 con Javier", tipo: "VISITA", dias: 3, hora: 18, cliente: "javier", ref: "GR-2409" },
+  { titulo: "Reportaje de fotos GR-2405", tipo: "OTRO", dias: 4, hora: 10, duracion: 2, cliente: "manuel", ref: "GR-2405", notas: "Fotógrafo confirmado." },
+  { titulo: "Jornada de captación en Zaidín", tipo: "OTRO", dias: 7, diasTodoElDia: 2, notas: "Buzoneo y visitas a porterías de los bloques." },
+  { titulo: "Visita GR-2418 con Carmen", tipo: "VISITA", dias: 8, hora: 11.5, cliente: "carmen", ref: "GR-2418" },
+  { titulo: "Reunión con Elena (tasación)", tipo: "REUNION", dias: 9, hora: 17, cliente: "elena" },
+  { titulo: "Formación nuevo CRM", tipo: "REUNION", dias: 14, diasTodoElDia: 1 },
+];
+
+/** Medianoche UTC del día a `dias` de hoy: así se guardan los eventos de todo el día. */
+function diaUTC(dias: number) {
+  const d = new Date(Date.now() + dias * DAY);
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+}
+
 async function main() {
   console.log("Borrando datos existentes…");
   // Orden por claves foráneas: primero lo que depende de clientes, inmuebles y bloques.
   await prisma.$transaction([
+    prisma.evento.deleteMany(),
     prisma.operacion.deleteMany(),
     prisma.interes.deleteMany(),
     prisma.archivo.deleteMany(),
@@ -568,7 +601,24 @@ async function main() {
     })),
   });
 
-  const [bloques, clientes, inmuebles, contactosTotal, deInmueble, potenciales, intereses, operaciones] =
+  console.log("Creando agenda…");
+  await prisma.evento.createMany({
+    data: EVENTOS.map((ev) => {
+      const enlaces = {
+        clienteId: ev.cliente ? clienteId.get(ev.cliente)! : null,
+        inmuebleId: ev.ref ? inmuebleId.get(ev.ref)! : null,
+      };
+      const base = { titulo: ev.titulo, tipo: ev.tipo, notas: ev.notas ?? null, ...enlaces };
+      if (ev.diasTodoElDia) {
+        return { ...base, todoElDia: true, inicio: diaUTC(ev.dias), fin: diaUTC(ev.dias + ev.diasTodoElDia) };
+      }
+      const hora = ev.hora ?? 10;
+      const inicio = dia(ev.dias, Math.floor(hora), Math.round((hora % 1) * 60));
+      return { ...base, todoElDia: false, inicio, fin: new Date(inicio.getTime() + (ev.duracion ?? 1) * 60 * 60 * 1000) };
+    }),
+  });
+
+  const [bloques, clientes, inmuebles, contactosTotal, deInmueble, potenciales, intereses, operaciones, eventos] =
     await Promise.all([
       prisma.bloque.count(),
       prisma.cliente.count(),
@@ -578,6 +628,7 @@ async function main() {
       prisma.inmueble.count({ where: { adquisicionPotencial: true } }),
       prisma.interes.count(),
       prisma.operacion.count(),
+      prisma.evento.count(),
     ]);
   console.log({
     bloques,
@@ -588,6 +639,7 @@ async function main() {
     potenciales,
     intereses,
     operaciones,
+    eventos,
   });
 }
 

@@ -53,6 +53,38 @@ enum Ocupacion {
   VACIO
 }
 
+enum TipoEvento {
+  VISITA
+  REUNION
+  LLAMADA
+  FIRMA
+  OTRO
+}
+
+// Cita de la agenda. Puede ir ligada a un cliente y/o un inmueble; si se borra
+// alguno de ellos el evento se conserva sin el enlace.
+// Todo el día: inicio y fin son medianoche UTC y fin es exclusivo (como en iCal).
+model Evento {
+  id         String     @id @default(cuid())
+  titulo     String
+  tipo       TipoEvento @default(OTRO)
+  inicio     DateTime
+  fin        DateTime
+  todoElDia  Boolean    @default(false)
+  notas      String?
+  clienteId  String?
+  inmuebleId String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  cliente  Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  inmueble Inmueble? @relation(fields: [inmuebleId], references: [id], onDelete: SetNull)
+
+  @@index([inicio, fin])
+  @@index([clienteId])
+  @@index([inmuebleId])
+}
+
 // Edificio que agrupa pisos. calle + numero + localidad lo identifican de forma
 // única, lo que permite hacer upsert al importar desde Excel.
 model Bloque {
@@ -94,6 +126,7 @@ model Cliente {
   intereses            Interes[]
   operaciones          Operacion[]
   inmueblesEnPropiedad Inmueble[]  @relation("PropietarioInmueble")
+  eventos              Evento[]
 
   @@index([nombre])
   @@index([apellidos])
@@ -154,6 +187,7 @@ model Inmueble {
   intereses   Interes[]
   operaciones Operacion[]
   contactos   Contacto[]
+  eventos     Evento[]
 
   @@index([bloqueId])
   @@index([bloqueId, escalera, planta, puerta])

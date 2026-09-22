@@ -23,7 +23,7 @@ export function Topbar({ userEmail }: { userEmail: string | undefined }) {
         </div>
       </div>
       <div className="border-t border-border/70 px-2 py-1.5 md:hidden">
-        <MainNav className="overflow-x-auto" />
+        <MainNav className="overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden" />
       </div>
     </header>
   );
