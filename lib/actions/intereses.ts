@@ -1,20 +1,23 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth/require-session";
+import { existe, getContexto } from "@/lib/db";
 
 export async function agregarInteres(inmuebleId: string, clienteId: string) {
-  await requireSession();
+  const { db } = await getContexto();
 
-  const existente = await prisma.interes.findFirst({
+  if (!(await existe(db, "inmueble", inmuebleId)) || !(await existe(db, "cliente", clienteId))) {
+    return { success: false as const, error: "Ese cliente o inmueble ya no existe." };
+  }
+
+  const existente = await db.interes.findFirst({
     where: { inmuebleId, clienteId },
   });
   if (existente) {
     return { success: false as const, error: "Ese cliente ya está marcado como interesado." };
   }
 
-  await prisma.interes.create({ data: { inmuebleId, clienteId } });
+  await db.interes.create({ data: { inmuebleId, clienteId } });
 
   revalidatePath(`/inmuebles/${inmuebleId}`);
   revalidatePath(`/clientes/${clienteId}`);
@@ -22,9 +25,11 @@ export async function agregarInteres(inmuebleId: string, clienteId: string) {
 }
 
 export async function quitarInteres(interesId: string) {
-  await requireSession();
+  const { db } = await getContexto();
 
-  const interes = await prisma.interes.delete({ where: { id: interesId } });
+  const interes = await db.interes.findUnique({ where: { id: interesId } });
+  if (!interes) return { success: false as const, error: "Ese interés ya no existe." };
+  await db.interes.deleteMany({ where: { id: interesId } });
 
   revalidatePath(`/inmuebles/${interes.inmuebleId}`);
   revalidatePath(`/clientes/${interes.clienteId}`);

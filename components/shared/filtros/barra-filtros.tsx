@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Funnel, LoaderCircle, RotateCcw, Search, X } from "lucide-react";
+import { Download, Funnel, LoaderCircle, RotateCcw, Search, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { DEFINICIONES, type EntidadFiltrable } from "@/lib/filtros/definiciones";
+import { LIMITE_EXPORTACION } from "@/lib/exportar/limite";
 import {
   describirValor,
   leerFecha,
@@ -38,12 +39,15 @@ export function BarraFiltros({
   placeholder,
   ariaBusqueda,
   opciones = {},
+  exportar,
 }: {
   entidad: EntidadFiltrable;
   placeholder: string;
   ariaBusqueda: string;
   /** Options loaded from the database for fields declared as "dinamico". */
   opciones?: OpcionesDinamicas;
+  /** Directors only: offers the Excel of what the list shows (`total` rows). */
+  exportar?: { total: number };
 }) {
   const definicion = DEFINICIONES[entidad];
   const campos = definicion.campos as readonly Campo[];
@@ -220,6 +224,8 @@ export function BarraFiltros({
             </form>
           </PopoverContent>
         </Popover>
+
+        {exportar && <BotonExportar total={exportar.total} />}
       </div>
 
       {activos.length > 0 && (
@@ -452,5 +458,38 @@ function Booleano({ campo, valor, onChange }: { campo: CampoBool; valor: string;
       options={{ todos: "Indiferente", si: campo.si ?? "Sí", no: campo.no ?? "No" }}
       className="[&_label]:py-1 [&_label]:text-xs"
     />
+  );
+}
+
+/** Downloads the list as .xlsx with the current search, filters and order. */
+function BotonExportar({ total }: { total: number }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const params = new URLSearchParams(searchParams.toString());
+  params.delete("page");
+  const query = params.toString();
+  const href = `${pathname}/exportar${query ? `?${query}` : ""}`;
+
+  if (total === 0 || total > LIMITE_EXPORTACION) {
+    return (
+      <Button
+        variant="outline"
+        className="ml-auto h-9 shrink-0 gap-2"
+        disabled
+        title={total === 0 ? "No hay nada que exportar" : `Máximo ${LIMITE_EXPORTACION.toLocaleString("es-ES")} filas por archivo: filtra un poco más`}
+      >
+        <Download /> <span className="hidden sm:inline">Exportar</span>
+      </Button>
+    );
+  }
+  return (
+    <Button
+      variant="outline"
+      className="ml-auto h-9 shrink-0 gap-2"
+      nativeButton={false}
+      render={<a href={href} download aria-label={`Exportar ${total} a Excel`} />}
+    >
+      <Download /> <span className="hidden sm:inline">Exportar</span>
+    </Button>
   );
 }

@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth/require-session";
+import { existe, getContexto, SIN_PERMISO, type Contexto, type DbOficina } from "@/lib/db";
 import {
   aFecha,
   aValor,
@@ -21,11 +20,12 @@ const DIA_MS = 24 * 60 * 60 * 1000;
 const incluirEnlaces = {
   cliente: { select: { id: true, nombre: true, apellidos: true } },
   inmueble: { select: { id: true, referencia: true } },
+  creadoPor: { select: { nombre: true } },
 } as const;
 
 type EventoConEnlaces = Prisma.EventoGetPayload<{ include: typeof incluirEnlaces }>;
 
-function eventoAItem(e: EventoConEnlaces): ItemCalendario {
+function eventoAItem(e: EventoConEnlaces, ctx: Pick<Contexto, "usuario" | "esDirector">): ItemCalendario {
   return {
     id: e.id,
     fuente: "evento",
@@ -37,6 +37,8 @@ function eventoAItem(e: EventoConEnlaces): ItemCalendario {
     notas: e.notas,
     cliente: e.cliente ? { id: e.cliente.id, nombre: `${e.cliente.nombre} ${e.cliente.apellidos}` } : null,
     inmueble: e.inmueble,
+    autor: e.creadoPor?.nombre ?? null,
+    puedeEliminar: ctx.esDirector || e.creadoPorId === ctx.usuario.id,
   };
 }
 
@@ -45,7 +47,8 @@ function eventoAItem(e: EventoConEnlaces): ItemCalendario {
  * the CRM already knows (scheduled follow-ups, logged contacts, closed deals).
  */
 export async function obtenerCalendario(desdeISO: string, hastaISO: string): Promise<ItemCalendario[]> {
-  await requireSession();
+  const ctx = await getContexto();
+  const { db } = ctx;
   const desde = new Date(desdeISO);
   const hasta = new Date(hastaISO);
   if (Number.isNaN(desde.getTime()) || Number.isNaN(hasta.getTime())) return [];
@@ -54,17 +57,17 @@ export async function obtenerCalendario(desdeISO: string, hastaISO: string): Pro
   const desdeAmplio = new Date(desde.getTime() - DIA_MS);
   const hastaAmplio = new Date(hasta.getTime() + DIA_MS);
 
-  const [eventos, proximos, contactos, operaciones] = await Promise.all([
-    prisma.evento.findMany({
+  const [eventos, proximos, contactos, operaciones, finesAlquiler] = await Promise.all([
+    db.evento.findMany({
       where: { inicio: { lt: hastaAmplio }, fin: { gte: desdeAmplio } },
       include: incluirEnlaces,
       orderBy: { inicio: "asc" },
     }),
-    prisma.cliente.findMany({
+    db.cliente.findMany({
       where: { fechaProximoContacto: { gte: desdeAmplio, lt: hastaAmplio } },
       select: { id: true, nombre: true, apellidos: true, telefono: true, fechaProximoContacto: true },
     }),
-    prisma.contacto.findMany({
+    db.contacto.findMany({
       where: { fecha: { gte: desde, lt: hasta } },
       select: {
         id: true,
@@ -74,16 +77,26 @@ export async function obtenerCalendario(desdeISO: string, hastaISO: string): Pro
       },
       orderBy: { fecha: "asc" },
     }),
-    prisma.operacion.findMany({
+    db.operacion.findMany({
       where: { fecha: { gte: desdeAmplio, lt: hastaAmplio } },
       select: { id: true, fecha: true, tipoOperacion: true, notas: true, ...incluirEnlaces },
+    }),
+    db.inmueble.findMany({
+      where: { fechaFinAlquiler: { gte: desdeAmplio, lt: hastaAmplio } },
+      select: {
+        id: true,
+        referencia: true,
+        direccion: true,
+        fechaFinAlquiler: true,
+        propietario: { select: { id: true, nombre: true, apellidos: true } },
+      },
     }),
   ]);
 
   const nombre = (c: { nombre: string; apellidos: string }) => `${c.nombre} ${c.apellidos}`;
 
   return [
-    ...eventos.map(eventoAItem),
+    ...eventos.map((e) => eventoAItem(e, ctx)),
     ...proximos.map((c) => ({
       id: c.id,
       fuente: "proximo" as const,
@@ -104,6 +117,7 @@ export async function obtenerCalendario(desdeISO: string, hastaISO: string): Pro
       notas: c.nota,
       cliente: c.cliente ? { id: c.cliente.id, nombre: nombre(c.cliente) } : null,
       inmueble: c.inmueble,
+      autor: c.creadoPor?.nombre ?? null,
     })),
     ...operaciones.map((o) => ({
       id: o.id,
@@ -115,8 +129,31 @@ export async function obtenerCalendario(desdeISO: string, hastaISO: string): Pro
       notas: o.notas,
       cliente: { id: o.cliente.id, nombre: nombre(o.cliente) },
       inmueble: o.inmueble,
+      autor: o.creadoPor?.nombre ?? null,
+    })),
+    ...finesAlquiler.map((i) => ({
+      id: i.id,
+      fuente: "finAlquiler" as const,
+      titulo: `Fin alquiler ${i.referencia}`,
+      todoElDia: true,
+      inicio: aValor(i.fechaFinAlquiler!, true),
+      fin: null,
+      notas: i.direccion,
+      cliente: i.propietario ? { id: i.propietario.id, nombre: nombre(i.propietario) } : null,
+      inmueble: { id: i.id, referencia: i.referencia },
     })),
   ];
+}
+
+/** Error for the dialog when a linked client or property is not in the office. */
+async function comprobarEnlaces(db: DbOficina, data: EventoInput) {
+  if (data.clienteId && !(await existe(db, "cliente", data.clienteId))) {
+    return { clienteId: ["Ese cliente ya no existe."] };
+  }
+  if (data.inmuebleId && !(await existe(db, "inmueble", data.inmuebleId))) {
+    return { inmuebleId: ["Ese inmueble ya no existe."] };
+  }
+  return null;
 }
 
 function datosEvento(data: EventoInput) {
@@ -133,60 +170,75 @@ function datosEvento(data: EventoInput) {
 }
 
 export async function crearEvento(data: EventoInput) {
-  await requireSession();
+  const ctx = await getContexto();
+  const { db } = ctx;
   const parsed = eventoSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
   }
-  const evento = await prisma.evento.create({ data: datosEvento(parsed.data), include: incluirEnlaces });
-  return { success: true as const, evento: eventoAItem(evento) };
+  const enlaces = await comprobarEnlaces(db, parsed.data);
+  if (enlaces) return { success: false as const, error: enlaces };
+  const evento = await db.evento.create({ data: datosEvento(parsed.data), include: incluirEnlaces });
+  return { success: true as const, evento: eventoAItem(evento, ctx) };
 }
 
 export async function actualizarEvento(id: string, data: EventoInput) {
-  await requireSession();
+  const ctx = await getContexto();
+  const { db } = ctx;
   const parsed = eventoSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
   }
-  const evento = await prisma.evento.update({
+  const enlaces = await comprobarEnlaces(db, parsed.data);
+  if (enlaces) return { success: false as const, error: enlaces };
+  if (!(await existe(db, "evento", id))) {
+    return { success: false as const, error: { titulo: ["Este evento ya no existe."] } };
+  }
+  const evento = await db.evento.update({
     where: { id },
     data: datosEvento(parsed.data),
     include: incluirEnlaces,
   });
-  return { success: true as const, evento: eventoAItem(evento) };
+  return { success: true as const, evento: eventoAItem(evento, ctx) };
 }
 
 /** Drag & drop and resize: only the dates change. */
 export async function moverEvento(id: string, data: MoverEventoInput) {
-  await requireSession();
+  const { db } = await getContexto();
   const parsed = moverEventoSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: "Esas fechas no son válidas." };
   }
   const { todoElDia, inicio, fin } = parsed.data;
-  await prisma.evento.update({
+  const { count } = await db.evento.updateMany({
     where: { id },
     data: { todoElDia, inicio: aFecha(inicio, todoElDia), fin: aFecha(fin, todoElDia) },
   });
+  if (!count) return { success: false as const, error: "Este evento ya no existe." };
   return { success: true as const };
 }
 
+/** Directors delete any event; advisors only the ones they created. */
 export async function eliminarEvento(id: string) {
-  await requireSession();
-  await prisma.evento.delete({ where: { id } });
+  const { db, usuario, esDirector } = await getContexto();
+  const evento = await db.evento.findUnique({ where: { id }, select: { creadoPorId: true } });
+  if (!evento) return { success: false as const, error: "Este evento ya no existe." };
+  if (!esDirector && evento.creadoPorId !== usuario.id) return SIN_PERMISO;
+  await db.evento.deleteMany({ where: { id } });
   return { success: true as const };
 }
 
 /** Dragging a follow-up in the calendar reschedules the client's next contact. */
 export async function moverProximoContacto(clienteId: string, dia: string) {
-  await requireSession();
+  const { db } = await getContexto();
   if (!DIA_RE.test(dia)) {
     return { success: false as const, error: "Fecha no válida." };
   }
-  await prisma.cliente.update({
+  const { count } = await db.cliente.updateMany({
     where: { id: clienteId },
     data: { fechaProximoContacto: aFecha(dia, true) },
   });
+  if (!count) return { success: false as const, error: "Este cliente ya no existe." };
   revalidatePath("/");
   revalidatePath("/clientes");
   revalidatePath(`/clientes/${clienteId}`);

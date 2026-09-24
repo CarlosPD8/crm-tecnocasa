@@ -7,6 +7,8 @@ export type ArchivoConUrl = {
   nombreOriginal: string;
   tamanioBytes: number;
   url: string;
+  /** Directors delete any file; advisors only their own. */
+  puedeEliminar: boolean;
 };
 
 function formatTamanio(bytes: number) {
@@ -55,7 +57,7 @@ export function ArchivosList({ archivos }: { archivos: ArchivoConUrl[] }) {
               </span>
             </span>
           </a>
-          <EliminarArchivoButton archivoId={archivo.id} />
+          {archivo.puedeEliminar && <EliminarArchivoButton archivoId={archivo.id} nombre={archivo.nombreOriginal} />}
         </ItemRow>
       ))}
     </ItemList>

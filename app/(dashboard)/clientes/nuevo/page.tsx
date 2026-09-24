@@ -1,7 +1,11 @@
+import { getContexto, opcionesAsesor } from "@/lib/db";
 import { ClienteForm } from "@/components/clientes/cliente-form";
 import { PageHeader } from "@/components/shared/page-header";
 
-export default function NuevoClientePage() {
+export default async function NuevoClientePage() {
+  const { db, esDirector, usuario } = await getContexto();
+  const asesores = esDirector ? await opcionesAsesor(db) : undefined;
+
   return (
     <div className="flex flex-col gap-8">
       <PageHeader
@@ -10,7 +14,7 @@ export default function NuevoClientePage() {
         title="Nuevo cliente"
         description="Programa una fecha de próximo contacto para que aparezca en el panel cuando toque llamar."
       />
-      <ClienteForm />
+      <ClienteForm asesores={asesores} asesorInicial={usuario.id} />
     </div>
   );
 }

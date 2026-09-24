@@ -8,6 +8,7 @@ export type ContactoItem = {
   nota: string;
   cliente?: { id: string; nombre: string; apellidos: string } | null;
   inmueble?: { id: string; referencia: string } | null;
+  creadoPor?: { nombre: string } | null;
 };
 
 /**
@@ -50,6 +51,9 @@ export function ContactosList({
               <span className="text-muted-foreground">
                 hace {formatDistanceToNowStrict(contacto.fecha, { locale: es })}
               </span>
+              {contacto.creadoPor && (
+                <span className="text-muted-foreground">· {contacto.creadoPor.nombre}</span>
+              )}
               {contexto === "cliente" && contacto.inmueble && (
                 <Link
                   href={`/inmuebles/${contacto.inmueble.id}`}

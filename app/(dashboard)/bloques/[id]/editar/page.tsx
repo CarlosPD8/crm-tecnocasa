@@ -1,12 +1,13 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getContexto } from "@/lib/db";
 import { formatBloque } from "@/lib/validations/bloque";
 import { BloqueForm } from "@/components/bloques/bloque-form";
 import { PageHeader } from "@/components/shared/page-header";
 
 export default async function EditarBloquePage({ params }: { params: Promise<{ id: string }> }) {
+  const { db } = await getContexto();
   const { id } = await params;
-  const bloque = await prisma.bloque.findUnique({ where: { id } });
+  const bloque = await db.bloque.findUnique({ where: { id } });
   if (!bloque) notFound();
 
   return (

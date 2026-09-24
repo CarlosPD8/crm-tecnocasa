@@ -1,18 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth/require-session";
+import { existe, getContexto } from "@/lib/db";
 import { operacionSchema, type OperacionInput } from "@/lib/validations/operacion";
 
 export async function crearOperacion(inmuebleId: string, data: OperacionInput) {
-  await requireSession();
+  const { db } = await getContexto();
   const parsed = operacionSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
   }
 
-  const inmueble = await prisma.inmueble.findUnique({ where: { id: inmuebleId } });
+  const inmueble = await db.inmueble.findUnique({ where: { id: inmuebleId } });
   if (!inmueble) {
     return { success: false as const, error: { _: ["Inmueble no encontrado."] } };
   }
@@ -22,11 +21,14 @@ export async function crearOperacion(inmuebleId: string, data: OperacionInput) {
       error: { _: ["Este inmueble ya tiene una operación cerrada."] },
     };
   }
+  if (!(await existe(db, "cliente", parsed.data.clienteId))) {
+    return { success: false as const, error: { clienteId: ["Cliente no encontrado."] } };
+  }
 
   const nuevoEstado = parsed.data.tipoOperacion === "VENTA" ? "VENDIDO" : "ALQUILADO";
 
-  await prisma.$transaction([
-    prisma.operacion.create({
+  await db.$transaction([
+    db.operacion.create({
       data: {
         inmuebleId,
         clienteId: parsed.data.clienteId,
@@ -35,7 +37,7 @@ export async function crearOperacion(inmuebleId: string, data: OperacionInput) {
         notas: parsed.data.notas && parsed.data.notas.trim() !== "" ? parsed.data.notas : null,
       },
     }),
-    prisma.inmueble.update({
+    db.inmueble.update({
       where: { id: inmuebleId },
       data: { estado: nuevoEstado },
     }),

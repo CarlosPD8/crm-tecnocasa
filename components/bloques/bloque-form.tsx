@@ -42,7 +42,9 @@ export function BloqueForm({ bloque }: { bloque?: Bloque }) {
       for (const [campo, mensajes] of Object.entries(result.error)) {
         if (mensajes?.[0]) setError(campo as keyof BloqueInput, { message: mensajes[0] });
       }
-      toast.error("Revisa los datos del formulario.");
+      // Errors not tied to a field (e.g. the record was deleted meanwhile).
+      const general = "_" in result.error ? result.error._?.[0] : undefined;
+      toast.error(general ?? "Revisa los datos del formulario.");
       return;
     }
 

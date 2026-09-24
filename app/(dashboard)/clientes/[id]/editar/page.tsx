@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getContexto, opcionesAsesor } from "@/lib/db";
 import { ClienteForm } from "@/components/clientes/cliente-form";
 import { PageHeader } from "@/components/shared/page-header";
 
@@ -8,8 +8,12 @@ export default async function EditarClientePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const { db, esDirector } = await getContexto();
   const { id } = await params;
-  const cliente = await prisma.cliente.findUnique({ where: { id } });
+  const [cliente, asesores] = await Promise.all([
+    db.cliente.findUnique({ where: { id } }),
+    esDirector ? opcionesAsesor(db) : undefined,
+  ]);
 
   if (!cliente) notFound();
 
@@ -20,7 +24,7 @@ export default async function EditarClientePage({
         eyebrow="Editar cliente"
         title={`${cliente.nombre} ${cliente.apellidos}`}
       />
-      <ClienteForm cliente={cliente} />
+      <ClienteForm cliente={cliente} asesores={asesores} />
     </div>
   );
 }

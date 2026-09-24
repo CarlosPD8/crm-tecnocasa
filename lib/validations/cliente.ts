@@ -54,6 +54,8 @@ export const clienteSchema = z.object({
   tipos: z.array(z.enum(ETIQUETAS)).min(1, "Elige al menos una etiqueta"),
   notas: z.string().optional().or(z.literal("")),
   fechaProximoContacto: z.string().optional().or(z.literal("")),
+  // Only directors send it; "" = no advisor. Ignored for advisors (see resolverAsesor).
+  asesorId: z.string().optional(),
 });
 
 export type ClienteInput = z.infer<typeof clienteSchema>;

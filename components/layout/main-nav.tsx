@@ -13,7 +13,9 @@ const links = [
   { href: "/calendario", label: "Calendario" },
 ];
 
-export function MainNav({ className }: { className?: string }) {
+const LINK_EQUIPO = { href: "/equipo", label: "Equipo" };
+
+export function MainNav({ esDirector, className }: { esDirector: boolean; className?: string }) {
   const pathname = usePathname();
   const navRef = useRef<HTMLElement>(null);
 
@@ -27,7 +29,7 @@ export function MainNav({ className }: { className?: string }) {
 
   return (
     <nav ref={navRef} aria-label="Principal" className={cn("flex items-center gap-1", className)}>
-      {links.map(({ href, label }) => {
+      {(esDirector ? [...links, LINK_EQUIPO] : links).map(({ href, label }) => {
         const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (
           <Link

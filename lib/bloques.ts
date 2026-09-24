@@ -1,18 +1,18 @@
-import { prisma } from "@/lib/prisma";
+import type { DbOficina } from "@/lib/db";
 import { RESUMEN_VACIO, type ResumenOcupacion } from "@/lib/validations/bloque";
 
 /**
  * Occupancy breakdown and potential-acquisition count per block, in two
  * grouped queries instead of loading every flat.
  */
-export async function resumenPorBloque(bloqueIds: string[]) {
+export async function resumenPorBloque(db: DbOficina, bloqueIds: string[]) {
   const [ocupacion, potenciales] = await Promise.all([
-    prisma.inmueble.groupBy({
+    db.inmueble.groupBy({
       by: ["bloqueId", "ocupacion"],
       where: { bloqueId: { in: bloqueIds } },
       _count: { _all: true },
     }),
-    prisma.inmueble.groupBy({
+    db.inmueble.groupBy({
       by: ["bloqueId"],
       where: { bloqueId: { in: bloqueIds }, adquisicionPotencial: true },
       _count: { _all: true },

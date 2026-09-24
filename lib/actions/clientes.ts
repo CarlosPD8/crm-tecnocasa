@@ -1,31 +1,24 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth/require-session";
+import { getContexto, resolverAsesor, SIN_PERMISO, type DbOficina } from "@/lib/db";
 import { clienteSchema, normalizarDni, ordenarEtiquetas, type ClienteInput } from "@/lib/validations/cliente";
 
 function toNullable(value: string | undefined) {
   return value && value.trim() !== "" ? value : null;
 }
 
-/**
- * Tags in display order. The legacy single-type column mirrors the first tag
- * until the deployed version stops reading it.
- */
-function etiquetas(tipos: ClienteInput["tipos"]) {
-  const ordenadas = ordenarEtiquetas(tipos);
-  return { tipos: ordenadas, tipoCliente: ordenadas[0] };
-}
+const NO_ENCONTRADO = { success: false as const, error: { _: ["Este cliente ya no existe."] } };
 
-/** Normalized DNI, or an error if another client already has it. */
+/** Normalized DNI, or an error if another client of the office already has it. */
 async function comprobarDni(
+  db: DbOficina,
   dni: string | undefined,
   excluirId?: string
 ): Promise<{ ok: true; dni: string | null } | { ok: false; mensaje: string }> {
   const normalizado = dni ? normalizarDni(dni) : null;
   if (!normalizado) return { ok: true, dni: null };
-  const otro = await prisma.cliente.findFirst({
+  const otro = await db.cliente.findFirst({
     where: { dni: normalizado, ...(excluirId ? { NOT: { id: excluirId } } : {}) },
     select: { nombre: true, apellidos: true },
   });
@@ -35,29 +28,34 @@ async function comprobarDni(
   return { ok: true, dni: normalizado };
 }
 
+function datosCliente(data: ClienteInput, dni: string | null) {
+  return {
+    nombre: data.nombre,
+    apellidos: data.apellidos,
+    dni,
+    telefono: toNullable(data.telefono),
+    email: toNullable(data.email),
+    direccion: toNullable(data.direccion),
+    tipos: ordenarEtiquetas(data.tipos),
+    notas: toNullable(data.notas),
+    fechaProximoContacto: data.fechaProximoContacto ? new Date(data.fechaProximoContacto) : null,
+  };
+}
+
 export async function crearCliente(data: ClienteInput) {
-  await requireSession();
+  const ctx = await getContexto();
+  const { db } = ctx;
   const parsed = clienteSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
   }
-  const dni = await comprobarDni(parsed.data.dni);
+  const dni = await comprobarDni(db, parsed.data.dni);
   if (!dni.ok) return { success: false as const, error: { dni: [dni.mensaje] } };
+  const asesor = await resolverAsesor(ctx, parsed.data.asesorId);
+  if (!asesor.ok) return { success: false as const, error: { asesorId: [asesor.error] } };
 
-  const cliente = await prisma.cliente.create({
-    data: {
-      nombre: parsed.data.nombre,
-      apellidos: parsed.data.apellidos,
-      dni: dni.dni,
-      telefono: toNullable(parsed.data.telefono),
-      email: toNullable(parsed.data.email),
-      direccion: toNullable(parsed.data.direccion),
-      ...etiquetas(parsed.data.tipos),
-      notas: toNullable(parsed.data.notas),
-      fechaProximoContacto: parsed.data.fechaProximoContacto
-        ? new Date(parsed.data.fechaProximoContacto)
-        : null,
-    },
+  const cliente = await db.cliente.create({
+    data: { ...datosCliente(parsed.data, dni.dni), asesorId: asesor.asesorId },
   });
 
   revalidatePath("/clientes");
@@ -65,30 +63,26 @@ export async function crearCliente(data: ClienteInput) {
 }
 
 export async function actualizarCliente(id: string, data: ClienteInput) {
-  await requireSession();
+  const ctx = await getContexto();
+  const { db } = ctx;
   const parsed = clienteSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
   }
-  const dni = await comprobarDni(parsed.data.dni, id);
+  const dni = await comprobarDni(db, parsed.data.dni, id);
   if (!dni.ok) return { success: false as const, error: { dni: [dni.mensaje] } };
 
-  const cliente = await prisma.cliente.update({
+  const actual = await db.cliente.findUnique({ where: { id }, select: { asesorId: true } });
+  if (!actual) return NO_ENCONTRADO;
+  const asesor = await resolverAsesor(ctx, parsed.data.asesorId, actual.asesorId);
+  if (!asesor.ok) return { success: false as const, error: { asesorId: [asesor.error] } };
+
+  const { count } = await db.cliente.updateMany({
     where: { id },
-    data: {
-      nombre: parsed.data.nombre,
-      apellidos: parsed.data.apellidos,
-      dni: dni.dni,
-      telefono: toNullable(parsed.data.telefono),
-      email: toNullable(parsed.data.email),
-      direccion: toNullable(parsed.data.direccion),
-      ...etiquetas(parsed.data.tipos),
-      notas: toNullable(parsed.data.notas),
-      fechaProximoContacto: parsed.data.fechaProximoContacto
-        ? new Date(parsed.data.fechaProximoContacto)
-        : null,
-    },
+    data: { ...datosCliente(parsed.data, dni.dni), asesorId: asesor.asesorId },
   });
+  if (!count) return NO_ENCONTRADO;
+  const cliente = await db.cliente.findUniqueOrThrow({ where: { id } });
 
   revalidatePath("/clientes");
   revalidatePath(`/clientes/${id}`);
@@ -96,38 +90,34 @@ export async function actualizarCliente(id: string, data: ClienteInput) {
 }
 
 export async function eliminarCliente(id: string) {
-  await requireSession();
+  const { db, esDirector } = await getContexto();
+  if (!esDirector) return SIN_PERMISO;
 
-  const bloqueado = await prisma.cliente.findFirst({
-    where: {
-      id,
-      OR: [
-        { operaciones: { some: {} } },
-        { inmueblesEnPropiedad: { some: {} } },
-      ],
-    },
-    select: { id: true },
+  const cliente = await db.cliente.findUnique({
+    where: { id },
+    select: { _count: { select: { operaciones: true, inmueblesEnPropiedad: true } } },
   });
+  if (!cliente) return { success: false as const, error: "Este cliente ya no existe." };
 
-  if (bloqueado) {
+  if (cliente._count.operaciones || cliente._count.inmueblesEnPropiedad) {
     return {
       success: false as const,
       error: "No se puede eliminar: tiene operaciones o inmuebles asociados.",
     };
   }
 
-  await prisma.cliente.delete({ where: { id } });
+  await db.cliente.deleteMany({ where: { id } });
   revalidatePath("/clientes");
   return { success: true as const };
 }
 
 export async function buscarClientes(query: string) {
-  await requireSession();
+  const { db } = await getContexto();
 
   const q = query.trim();
   if (!q) return [];
 
-  return prisma.cliente.findMany({
+  return db.cliente.findMany({
     where: {
       OR: [
         { nombre: { contains: q, mode: "insensitive" } },

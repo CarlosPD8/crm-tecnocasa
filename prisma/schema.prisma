@@ -12,9 +12,13 @@ datasource db {
 
 enum TipoCliente {
   COMPRADOR
-  VENDEDOR
   INQUILINO
   PROPIETARIO
+}
+
+enum RolUsuario {
+  DIRECTOR
+  ASESOR
 }
 
 enum TipoInmueble {
@@ -61,70 +65,133 @@ enum TipoEvento {
   OTRO
 }
 
+// Cada oficina es un cliente del CRM con sus datos totalmente aislados. Toda
+// tabla de negocio lleva oficinaId: la app lo inyecta (lib/db.ts) y los triggers
+// crm_misma_oficina impiden enlazar filas de oficinas distintas.
+// El default crm_sin_oficina() lanza un error: insertar sin oficina falla.
+model Oficina {
+  id        String   @id @default(cuid())
+  nombre    String
+  activa    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usuarios    Usuario[]
+  clientes    Cliente[]
+  inmuebles   Inmueble[]
+  bloques     Bloque[]
+  contactos   Contacto[]
+  eventos     Evento[]
+  intereses   Interes[]
+  operaciones Operacion[]
+  archivos    Archivo[]
+}
+
+// Perfil de un usuario de Supabase Auth (id = auth.users.id). Nunca se borra:
+// se desactiva, para conservar la autoría de lo que creó.
+model Usuario {
+  id                  String     @id
+  oficinaId           String     @default(dbgenerated("crm_sin_oficina()"))
+  nombre              String
+  email               String     @unique
+  rol                 RolUsuario @default(ASESOR)
+  activo              Boolean    @default(true)
+  // Contraseña temporal puesta por el director: hay que cambiarla al entrar.
+  debeCambiarPassword Boolean    @default(true)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  oficina Oficina @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
+
+  clientesCreados    Cliente[]   @relation("ClienteCreadoPor")
+  clientesAsignados  Cliente[]   @relation("ClienteAsesor")
+  inmueblesCreados   Inmueble[]  @relation("InmuebleCreadoPor")
+  inmueblesAsignados Inmueble[]  @relation("InmuebleAsesor")
+  bloquesCreados     Bloque[]    @relation("BloqueCreadoPor")
+  contactosCreados   Contacto[]  @relation("ContactoCreadoPor")
+  eventosCreados     Evento[]    @relation("EventoCreadoPor")
+  operacionesCreadas Operacion[] @relation("OperacionCreadoPor")
+  archivosCreados    Archivo[]   @relation("ArchivoCreadoPor")
+
+  @@index([oficinaId])
+}
+
 // Cita de la agenda. Puede ir ligada a un cliente y/o un inmueble; si se borra
 // alguno de ellos el evento se conserva sin el enlace.
 // Todo el día: inicio y fin son medianoche UTC y fin es exclusivo (como en iCal).
 model Evento {
-  id         String     @id @default(cuid())
-  titulo     String
-  tipo       TipoEvento @default(OTRO)
-  inicio     DateTime
-  fin        DateTime
-  todoElDia  Boolean    @default(false)
-  notas      String?
-  clienteId  String?
-  inmuebleId String?
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  id          String     @id @default(cuid())
+  oficinaId   String     @default(dbgenerated("crm_sin_oficina()"))
+  titulo      String
+  tipo        TipoEvento @default(OTRO)
+  inicio      DateTime
+  fin         DateTime
+  todoElDia   Boolean    @default(false)
+  notas       String?
+  clienteId   String?
+  inmuebleId  String?
+  creadoPorId String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
-  cliente  Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  inmueble Inmueble? @relation(fields: [inmuebleId], references: [id], onDelete: SetNull)
+  oficina   Oficina   @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
+  cliente   Cliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  inmueble  Inmueble? @relation(fields: [inmuebleId], references: [id], onDelete: SetNull)
+  creadoPor Usuario?  @relation("EventoCreadoPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
 
-  @@index([inicio, fin])
+  @@index([oficinaId, inicio, fin])
   @@index([clienteId])
   @@index([inmuebleId])
 }
 
 // Edificio que agrupa pisos. calle + numero + localidad lo identifican de forma
-// única, lo que permite hacer upsert al importar desde Excel.
+// única dentro de la oficina, lo que permite hacer upsert al importar desde Excel.
 model Bloque {
   id           String   @id @default(cuid())
+  oficinaId    String   @default(dbgenerated("crm_sin_oficina()"))
   calle        String
   numero       String
   localidad    String
   nombre       String?
   codigoPostal String?
   notas        String?
+  creadoPorId  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  oficina   Oficina    @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
+  creadoPor Usuario?   @relation("BloqueCreadoPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
   inmuebles Inmueble[]
 
-  @@unique([calle, numero, localidad])
+  @@unique([oficinaId, calle, numero, localidad])
   @@index([localidad])
 }
 
 model Cliente {
-  id                   String      @id @default(cuid())
+  id                   String        @id @default(cuid())
+  oficinaId            String        @default(dbgenerated("crm_sin_oficina()"))
   nombre               String
   apellidos            String
-  // DNI/NIE normalizado (sin espacios ni guiones, en mayúsculas). Único: sirve
-  // para detectar duplicados, también al importar desde Excel.
-  dni                  String?     @unique
+  // DNI/NIE normalizado (sin espacios ni guiones, en mayúsculas). Único en la
+  // oficina: sirve para detectar duplicados, también al importar desde Excel.
+  dni                  String?
   telefono             String?
   email                String?
   direccion            String?
   // Etiquetas del cliente: puede ser a la vez comprador, inquilino y propietario.
   tipos                TipoCliente[] @default([])
-  // Obsoleto: sustituido por `tipos`. Se mantiene (igual a la primera etiqueta)
-  // solo mientras la versión desplegada lo lea; se elimina tras el despliegue.
-  tipoCliente          TipoCliente
   notas                String?
   fechaUltimoContacto  DateTime?
   fechaProximoContacto DateTime?
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
+  // Asesor responsable del cliente; creadoPor es quien lo dio de alta.
+  asesorId             String?
+  creadoPorId          String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
+  oficina              Oficina     @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
+  asesor               Usuario?    @relation("ClienteAsesor", fields: [asesorId], references: [id], onDelete: SetNull)
+  creadoPor            Usuario?    @relation("ClienteCreadoPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
   contactos            Contacto[]
   archivos             Archivo[]
   intereses            Interes[]
@@ -132,11 +199,13 @@ model Cliente {
   inmueblesEnPropiedad Inmueble[]  @relation("PropietarioInmueble")
   eventos              Evento[]
 
+  @@unique([oficinaId, dni])
+  @@index([oficinaId, createdAt])
+  @@index([oficinaId, asesorId])
   @@index([nombre])
   @@index([apellidos])
   @@index([telefono])
   @@index([email])
-  @@index([tipoCliente])
   @@index([tipos], type: Gin)
   @@index([fechaProximoContacto])
 }
@@ -145,23 +214,28 @@ model Cliente {
 // al propietario sobre su piso): así aparece en los dos historiales sin duplicarse.
 // La migración añade un CHECK que exige al menos uno de los dos.
 model Contacto {
-  id         String   @id @default(cuid())
-  clienteId  String?
-  inmuebleId String?
-  fecha      DateTime @default(now())
-  nota       String
+  id          String   @id @default(cuid())
+  oficinaId   String   @default(dbgenerated("crm_sin_oficina()"))
+  clienteId   String?
+  inmuebleId  String?
+  fecha       DateTime @default(now())
+  nota        String
+  creadoPorId String?
 
-  cliente  Cliente?  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  inmueble Inmueble? @relation(fields: [inmuebleId], references: [id], onDelete: Cascade)
+  oficina   Oficina   @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
+  cliente   Cliente?  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  inmueble  Inmueble? @relation(fields: [inmuebleId], references: [id], onDelete: Cascade)
+  creadoPor Usuario?  @relation("ContactoCreadoPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
 
+  @@index([oficinaId, fecha])
   @@index([clienteId])
   @@index([inmuebleId])
-  @@index([fecha])
 }
 
 model Inmueble {
   id              String         @id @default(cuid())
-  referencia      String         @unique
+  oficinaId       String         @default(dbgenerated("crm_sin_oficina()"))
+  referencia      String
   direccion       String
   localidad       String
   tipoInmueble    TipoInmueble
@@ -173,6 +247,9 @@ model Inmueble {
   descripcion     String?
   estado          EstadoInmueble @default(DISPONIBLE)
   propietarioId   String?
+  // Asesor responsable del inmueble; creadoPor es quien lo dio de alta.
+  asesorId        String?
+  creadoPorId     String?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -185,15 +262,24 @@ model Inmueble {
   ocupacion            Ocupacion?
   adquisicionPotencial Boolean    @default(false)
   fechaUltimoContacto  DateTime?
+  // Fin del contrato de alquiler vigente (solo fecha).
+  fechaFinAlquiler     DateTime?  @db.Date
 
+  oficina     Oficina     @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
   propietario Cliente?    @relation("PropietarioInmueble", fields: [propietarioId], references: [id], onDelete: Restrict)
   bloque      Bloque?     @relation(fields: [bloqueId], references: [id], onDelete: Restrict)
+  asesor      Usuario?    @relation("InmuebleAsesor", fields: [asesorId], references: [id], onDelete: SetNull)
+  creadoPor   Usuario?    @relation("InmuebleCreadoPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
   archivos    Archivo[]
   intereses   Interes[]
   operaciones Operacion[]
   contactos   Contacto[]
   eventos     Evento[]
 
+  @@unique([oficinaId, referencia])
+  @@index([oficinaId, createdAt])
+  @@index([oficinaId, asesorId])
+  @@index([oficinaId, fechaFinAlquiler])
   @@index([bloqueId])
   @@index([bloqueId, escalera, planta, puerta])
   @@index([ocupacion])
@@ -209,37 +295,45 @@ model Inmueble {
 
 model Interes {
   id         String   @id @default(cuid())
+  oficinaId  String   @default(dbgenerated("crm_sin_oficina()"))
   clienteId  String
   inmuebleId String
   fecha      DateTime @default(now())
 
+  oficina  Oficina  @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
   cliente  Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   inmueble Inmueble @relation(fields: [inmuebleId], references: [id], onDelete: Cascade)
 
+  @@index([oficinaId])
   @@index([clienteId])
   @@index([inmuebleId])
 }
 
 model Operacion {
   id            String        @id @default(cuid())
+  oficinaId     String        @default(dbgenerated("crm_sin_oficina()"))
   clienteId     String
   inmuebleId    String
   tipoOperacion TipoOperacion
   fecha         DateTime      @default(now())
   precioFinal   Decimal       @db.Decimal(12, 2)
   notas         String?
+  creadoPorId   String?
   createdAt     DateTime      @default(now())
 
-  cliente  Cliente  @relation(fields: [clienteId], references: [id], onDelete: Restrict)
-  inmueble Inmueble @relation(fields: [inmuebleId], references: [id], onDelete: Restrict)
+  oficina   Oficina  @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Restrict)
+  inmueble  Inmueble @relation(fields: [inmuebleId], references: [id], onDelete: Restrict)
+  creadoPor Usuario? @relation("OperacionCreadoPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
 
+  @@index([oficinaId, fecha])
   @@index([clienteId])
   @@index([inmuebleId])
-  @@index([fecha])
 }
 
 model Archivo {
   id             String           @id @default(cuid())
+  oficinaId      String           @default(dbgenerated("crm_sin_oficina()"))
   categoria      CategoriaArchivo
   clienteId      String?
   inmuebleId     String?
@@ -250,11 +344,15 @@ model Archivo {
   tamanioBytes   Int
   mimeType       String
   orden          Int              @default(0)
+  creadoPorId    String?
   createdAt      DateTime         @default(now())
 
-  cliente  Cliente?  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  inmueble Inmueble? @relation(fields: [inmuebleId], references: [id], onDelete: Cascade)
+  oficina   Oficina   @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
+  cliente   Cliente?  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  inmueble  Inmueble? @relation(fields: [inmuebleId], references: [id], onDelete: Cascade)
+  creadoPor Usuario?  @relation("ArchivoCreadoPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
 
+  @@index([oficinaId])
   @@index([clienteId])
   @@index([inmuebleId])
   @@index([categoria])

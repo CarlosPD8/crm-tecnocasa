@@ -37,6 +37,9 @@ export type BorradorEvento = {
   notas: string;
   cliente: Enlace;
   inmueble: Enlace;
+  /** Existing events: who created it and whether this user may delete it. */
+  autor?: string | null;
+  puedeEliminar?: boolean;
 };
 
 const dia = (d: Date) => format(d, "yyyy-MM-dd");
@@ -151,6 +154,9 @@ function EventoForm({
         const result = editando ? await actualizarEvento(inicial.id!, entrada) : await crearEvento(entrada);
         if (!result.success) {
           setErrores(result.error);
+          // Errors without a field of their own here (e.g. a deleted client).
+          const otro = Object.entries(result.error).find(([campo]) => !["titulo", "inicio", "fin"].includes(campo));
+          if (otro?.[1]?.[0]) toast.error(otro[1][0]);
           return;
         }
       } catch {
@@ -170,7 +176,11 @@ function EventoForm({
     }
     startTransition(async () => {
       try {
-        await eliminarEvento(inicial.id!);
+        const result = await eliminarEvento(inicial.id!);
+        if (!result.success) {
+          toast.error(result.error);
+          return;
+        }
       } catch {
         toast.error("No se pudo eliminar el evento.");
         return;
@@ -186,7 +196,9 @@ function EventoForm({
       <DialogHeader>
         <DialogTitle>{editando ? "Editar evento" : "Nuevo evento"}</DialogTitle>
         <DialogDescription>
-          Visitas, reuniones o cualquier cita de la oficina. Después podrás arrastrarlo a otro día o estirarlo en el calendario.
+          {editando && inicial.autor
+            ? `Creado por ${inicial.autor}. Arrástralo a otro día o estíralo en el calendario.`
+            : "Visitas, reuniones o cualquier cita de la oficina. Después podrás arrastrarlo a otro día o estirarlo en el calendario."}
         </DialogDescription>
       </DialogHeader>
 
@@ -295,7 +307,7 @@ function EventoForm({
       </Field>
 
       <DialogFooter className="gap-2 sm:justify-between">
-        {editando ? (
+        {editando && inicial.puedeEliminar !== false ? (
           <Button
             type="button"
             variant={confirmarBorrado ? "destructive" : "ghost"}

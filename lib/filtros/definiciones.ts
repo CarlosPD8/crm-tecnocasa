@@ -13,6 +13,7 @@ export const FILTROS_CLIENTES = {
     { clave: "interes", etiqueta: "Interesado en", grupo: "Perfil", tipo: "multi", opciones: TIPO_OPERACION_LABELS },
     { clave: "propietario", etiqueta: "Tiene inmuebles en propiedad", grupo: "Perfil", tipo: "bool" },
     { clave: "operaciones", etiqueta: "Ha cerrado operaciones", grupo: "Perfil", tipo: "bool" },
+    { clave: "asesor", etiqueta: "Asesor responsable", grupo: "Perfil", tipo: "multi", opciones: "dinamico" },
     {
       clave: "proximo",
       etiqueta: "Próximo contacto",
@@ -62,6 +63,14 @@ export const FILTROS_INMUEBLES = {
     { clave: "ocupacion", etiqueta: "Ocupación", grupo: "Situación", tipo: "multi", opciones: OCUPACION_LABELS },
     { clave: "potencial", etiqueta: "Adquisición potencial", grupo: "Situación", tipo: "bool" },
     { clave: "propietario", etiqueta: "Con propietario asignado", grupo: "Situación", tipo: "bool" },
+    { clave: "asesor", etiqueta: "Asesor responsable", grupo: "Situación", tipo: "multi", opciones: "dinamico" },
+    {
+      clave: "finAlquiler",
+      etiqueta: "Fin del alquiler",
+      grupo: "Situación",
+      tipo: "fecha",
+      presets: ["pasados", "proximos30", "proximos90", "sin"],
+    },
     {
       clave: "ultimo",
       etiqueta: "Último contacto",
@@ -83,6 +92,7 @@ export const FILTROS_INMUEBLES = {
     referencia: "Referencia",
     ultimo: "Más tiempo sin contacto",
     ubicacion: "Bloque, escalera y planta",
+    finAlquiler: "Fin de alquiler más cercano",
   },
 } as const satisfies DefinicionFiltros;
 
@@ -110,6 +120,17 @@ export const DEFINICIONES = {
 } satisfies Record<string, DefinicionFiltros>;
 
 export type EntidadFiltrable = keyof typeof DEFINICIONES;
+
+/** Value of the advisor filter meaning «no advisor» (user ids are never this). */
+export const SIN_ASESOR = "ninguno";
+
+/** Options for the advisor filter: the office's users, inactive ones marked. */
+export function opcionesFiltroAsesor(asesores: { id: string; nombre: string; activo: boolean }[]) {
+  return {
+    [SIN_ASESOR]: "Sin asesor",
+    ...Object.fromEntries(asesores.map((a) => [a.id, a.activo ? a.nombre : `${a.nombre} (desactivado)`])),
+  };
+}
 
 /** Search params that carry filters (plus sort), to keep them across pagination. */
 export function paramsDeFiltros(entidad: EntidadFiltrable, sp: Record<string, string | undefined>) {

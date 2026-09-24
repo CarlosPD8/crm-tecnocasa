@@ -1,6 +1,8 @@
-// Datos de demostración (Granada capital). BORRA todos los bloques, clientes,
-// inmuebles, contactos, intereses, operaciones y registros de archivos antes de insertar.
-// Uso: npx prisma db seed
+// Datos de demostración (Granada capital) de la oficina «Demo» (ofi_demo). BORRA
+// sus bloques, clientes, inmuebles, contactos, intereses, operaciones, eventos y
+// registros de archivos antes de insertar. Las demás oficinas no se tocan: todo
+// pasa por la misma extensión de ámbito que usa la app (lib/ambito-oficina.ts).
+// Uso: SEED_CONFIRMAR=demo npx prisma db seed
 //
 // Las fechas son relativas a hoy, así que la demo tiene sentido cualquier día:
 // siempre hay contactos vencidos, para hoy y próximos, y operaciones recientes.
@@ -10,6 +12,7 @@ config({ path: ".env.local" });
 
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../lib/generated/prisma/client";
+import { extensionOficina } from "../lib/ambito-oficina";
 import type {
   EstadoInmueble,
   Ocupacion,
@@ -18,9 +21,35 @@ import type {
   TipoOperacion,
 } from "../lib/generated/prisma/enums";
 
-const prisma = new PrismaClient({
+// The seed deletes data: refuse to run unless explicitly confirmed, and say where.
+const destino = (() => {
+  try {
+    return new URL(process.env.DIRECT_URL ?? "").host;
+  } catch {
+    return "(DIRECT_URL no válida)";
+  }
+})();
+if (process.env.SEED_CONFIRMAR !== "demo") {
+  console.error(
+    `El seed borra y recrea los datos de demostración en ${destino}.\n` +
+      `Si es lo que quieres: SEED_CONFIRMAR=demo npx prisma db seed`
+  );
+  process.exit(1);
+}
+console.log(`Seed sobre ${destino}`);
+
+const OFICINA_DEMO = "ofi_demo";
+
+const base = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DIRECT_URL! }),
 });
+
+function clienteDemo(usuarioId: string) {
+  return base.$extends(extensionOficina(OFICINA_DEMO, usuarioId));
+}
+
+// Scoped to the demo office; assigned in main() once its director is known.
+let prisma: ReturnType<typeof clienteDemo>;
 
 const DAY = 24 * 60 * 60 * 1000;
 /** Fecha a `dias` de hoy (negativo = pasado), a una hora de oficina concreta. */
@@ -372,6 +401,7 @@ type InmuebleSeed = {
   puerta?: string;
   ocupacion: Ocupacion | null;
   potencial?: boolean;
+  finAlquiler?: number; // días desde hoy hasta el fin del contrato
 };
 
 const INMUEBLES: InmuebleSeed[] = [
@@ -392,9 +422,9 @@ const INMUEBLES: InmuebleSeed[] = [
   { ref: "GR-2415", direccion: "C/ Pedro Antonio de Alarcón 33, 4ºA", localidad: "Granada (Ronda)", tipo: "PISO", operacion: "VENTA", precio: 205000, m2: 102, hab: 3, banos: 2, estado: "VENDIDO", ocupacion: "PROPIETARIO", creado: -60, descripcion: "Piso con terraza en una de las calles más animadas. Vendido." },
   { ref: "GR-2416", direccion: "Avda. de Cervantes 40", localidad: "Granada (Genil)", tipo: "CASA", operacion: "VENTA", precio: 385000, m2: 220, hab: 4, banos: 3, estado: "VENDIDO", ocupacion: "PROPIETARIO", creado: -120, descripcion: "Casa adosada con jardín en zona residencial. Vendida." },
   { ref: "GR-2417", direccion: "C/ Joaquina Eguaras 3, solar", localidad: "Granada (Beiro)", tipo: "TERRENO", operacion: "VENTA", precio: 120000, m2: 380, estado: "VENDIDO", ocupacion: null, creado: -140, descripcion: "Solar urbano con licencia para edificio de viviendas. Vendido." },
-  { ref: "GR-2418", direccion: "C/ Estrellas 22", localidad: "Granada (Zaidín)", bloque: "estrellas", escalera: "Izquierda", planta: 1, puerta: "B", tipo: "PISO", operacion: "ALQUILER", precio: 640, m2: 75, hab: 2, banos: 1, estado: "ALQUILADO", propietario: "manuel", ocupacion: "INQUILINOS", potencial: true, creado: -50, descripcion: "Piso amueblado. Alquilado." },
-  { ref: "GR-2419", direccion: "C/ Navas 17, bajo", localidad: "Granada (Centro)", tipo: "LOCAL", operacion: "ALQUILER", precio: 1100, m2: 90, banos: 1, estado: "ALQUILADO", propietario: "teresa", ocupacion: "INQUILINOS", potencial: true, creado: -90, descripcion: "Local adaptado para consulta en calle peatonal. Alquilado a clínica de fisioterapia." },
-  { ref: "GR-2420", direccion: "Plaza de Gracia 4, plaza 15", localidad: "Granada (Centro)", tipo: "GARAJE", operacion: "ALQUILER", precio: 95, m2: 11, estado: "ALQUILADO", propietario: "pilar", ocupacion: "INQUILINOS", potencial: true, creado: -70, descripcion: "Plaza de garaje en alquiler mensual. Alquilada." },
+  { ref: "GR-2418", direccion: "C/ Estrellas 22", localidad: "Granada (Zaidín)", bloque: "estrellas", escalera: "Izquierda", planta: 1, puerta: "B", tipo: "PISO", operacion: "ALQUILER", precio: 640, m2: 75, hab: 2, banos: 1, estado: "ALQUILADO", propietario: "manuel", ocupacion: "INQUILINOS", potencial: true, finAlquiler: 52, creado: -50, descripcion: "Piso amueblado. Alquilado." },
+  { ref: "GR-2419", direccion: "C/ Navas 17, bajo", localidad: "Granada (Centro)", tipo: "LOCAL", operacion: "ALQUILER", precio: 1100, m2: 90, banos: 1, estado: "ALQUILADO", propietario: "teresa", ocupacion: "INQUILINOS", potencial: true, finAlquiler: 20, creado: -90, descripcion: "Local adaptado para consulta en calle peatonal. Alquilado a clínica de fisioterapia." },
+  { ref: "GR-2420", direccion: "Plaza de Gracia 4, plaza 15", localidad: "Granada (Centro)", tipo: "GARAJE", operacion: "ALQUILER", precio: 95, m2: 11, estado: "ALQUILADO", propietario: "pilar", ocupacion: "INQUILINOS", potencial: true, finAlquiler: -5, creado: -70, descripcion: "Plaza de garaje en alquiler mensual. Alquilada." },
 ];
 
 // Contactos sobre un inmueble registrados desde su ficha (captación incluida).
@@ -475,7 +505,22 @@ function diaUTC(dias: number) {
 }
 
 async function main() {
-  console.log("Borrando datos existentes…");
+  await base.oficina.upsert({
+    where: { id: OFICINA_DEMO },
+    update: {},
+    create: { id: OFICINA_DEMO, nombre: "Demo" },
+  });
+  const director = await base.usuario.findFirst({
+    where: { oficinaId: OFICINA_DEMO, rol: "DIRECTOR", activo: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  if (!director) {
+    throw new Error("La oficina Demo no tiene director activo: créalo con scripts/alta-oficina.ts");
+  }
+  prisma = clienteDemo(director.id);
+
+  console.log("Borrando datos de la oficina Demo…");
   // Orden por claves foráneas: primero lo que depende de clientes, inmuebles y bloques.
   await prisma.$transaction([
     prisma.evento.deleteMany(),
@@ -504,7 +549,7 @@ async function main() {
         apellidos: c.apellidos,
         dni: DNIS[c.key] ? conLetra(DNIS[c.key]) : null,
         tipos: [c.tipo],
-        tipoCliente: c.tipo,
+        asesorId: director.id,
         telefono: c.telefono ?? null,
         email: c.email ?? null,
         direccion: c.direccion ?? null,
@@ -539,6 +584,8 @@ async function main() {
         puerta: inm.puerta ?? null,
         ocupacion: inm.ocupacion,
         adquisicionPotencial: inm.potencial ?? false,
+        fechaFinAlquiler: inm.finAlquiler === undefined ? null : diaUTC(inm.finAlquiler),
+        asesorId: director.id,
         createdAt: dia(inm.creado),
       },
     });
@@ -655,4 +702,4 @@ main()
     console.error(e);
     process.exitCode = 1;
   })
-  .finally(() => prisma.$disconnect());
+  .finally(() => base.$disconnect());

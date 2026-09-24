@@ -1,9 +1,10 @@
-import { formatDistanceToNowStrict } from "date-fns";
+import { differenceInCalendarDays, format, formatDistanceToNowStrict, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { Target } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { ocupacionLabel } from "@/lib/validations/inmueble";
+import { hoyISO } from "@/lib/filtros/tipos";
 import type { Ocupacion } from "@/lib/generated/prisma/enums";
 
 const OCUPACION_DOT: Record<Ocupacion | "SIN_DATOS", string> = {
@@ -60,5 +61,28 @@ export function UltimoContacto({ fecha, className }: { fecha: Date | null; class
     >
       hace {formatDistanceToNowStrict(fecha, { locale: es })}
     </time>
+  );
+}
+
+/** Lease end: the date plus how far away it is (days counted in Spain's calendar). */
+export function FinAlquiler({ fecha, className }: { fecha: Date | null; className?: string }) {
+  if (!fecha) return <span className={cn("text-muted-foreground", className)}>—</span>;
+  const dia = fecha.toISOString().slice(0, 10);
+  const dias = differenceInCalendarDays(parseISO(dia), parseISO(hoyISO()));
+  const [texto, tono] =
+    dias < 0
+      ? [`vencido hace ${-dias} ${dias === -1 ? "día" : "días"}`, "bg-destructive/10 text-destructive"]
+      : dias === 0
+        ? ["vence hoy", "bg-destructive/10 text-destructive"]
+        : dias <= 90
+          ? [`vence en ${dias} ${dias === 1 ? "día" : "días"}`, "bg-warning/15 text-foreground"]
+          : [`en ${dias} días`, "bg-secondary text-secondary-foreground"];
+  return (
+    <span className={cn("inline-flex flex-wrap items-center gap-2", className)}>
+      <time dateTime={dia} className="tabular">
+        {format(parseISO(dia), "dd/MM/yyyy")}
+      </time>
+      <span className={cn("rounded-md px-1.5 py-0.5 text-xs font-medium", tono)}>{texto}</span>
+    </span>
   );
 }

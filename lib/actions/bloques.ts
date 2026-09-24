@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth/require-session";
+import { getContexto, SIN_PERMISO, type DbOficina } from "@/lib/db";
 import { bloqueSchema, type BloqueInput } from "@/lib/validations/bloque";
 
 function toNullable(value: string | undefined) {
@@ -25,8 +24,8 @@ const DUPLICADO = {
   error: { numero: ["Ya existe un bloque con esta calle, número y localidad."] },
 };
 
-async function existeOtro(data: BloqueInput, excluirId?: string) {
-  const otro = await prisma.bloque.findFirst({
+async function existeOtro(db: DbOficina, data: BloqueInput, excluirId?: string) {
+  const otro = await db.bloque.findFirst({
     where: {
       calle: { equals: data.calle, mode: "insensitive" },
       numero: { equals: data.numero, mode: "insensitive" },
@@ -39,14 +38,14 @@ async function existeOtro(data: BloqueInput, excluirId?: string) {
 }
 
 export async function crearBloque(data: BloqueInput) {
-  await requireSession();
+  const { db } = await getContexto();
   const parsed = bloqueSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
   }
-  if (await existeOtro(parsed.data)) return DUPLICADO;
+  if (await existeOtro(db, parsed.data)) return DUPLICADO;
 
-  const bloque = await prisma.bloque.create({ data: buildData(parsed.data) });
+  const bloque = await db.bloque.create({ data: buildData(parsed.data) });
 
   revalidatePath("/bloques");
   return {
@@ -61,14 +60,15 @@ export async function crearBloque(data: BloqueInput) {
 }
 
 export async function actualizarBloque(id: string, data: BloqueInput) {
-  await requireSession();
+  const { db } = await getContexto();
   const parsed = bloqueSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
   }
-  if (await existeOtro(parsed.data, id)) return DUPLICADO;
+  if (await existeOtro(db, parsed.data, id)) return DUPLICADO;
 
-  await prisma.bloque.update({ where: { id }, data: buildData(parsed.data) });
+  const { count } = await db.bloque.updateMany({ where: { id }, data: buildData(parsed.data) });
+  if (!count) return { success: false as const, error: { _: ["Este bloque ya no existe."] } };
 
   revalidatePath("/bloques");
   revalidatePath(`/bloques/${id}`);
@@ -76,9 +76,10 @@ export async function actualizarBloque(id: string, data: BloqueInput) {
 }
 
 export async function eliminarBloque(id: string) {
-  await requireSession();
+  const { db, esDirector } = await getContexto();
+  if (!esDirector) return SIN_PERMISO;
 
-  const pisos = await prisma.inmueble.count({ where: { bloqueId: id } });
+  const pisos = await db.inmueble.count({ where: { bloqueId: id } });
   if (pisos > 0) {
     return {
       success: false as const,
@@ -89,18 +90,19 @@ export async function eliminarBloque(id: string) {
     };
   }
 
-  await prisma.bloque.delete({ where: { id } });
+  const { count } = await db.bloque.deleteMany({ where: { id } });
+  if (!count) return { success: false as const, error: "Este bloque ya no existe." };
   revalidatePath("/bloques");
   return { success: true as const };
 }
 
 export async function buscarBloques(query: string) {
-  await requireSession();
+  const { db } = await getContexto();
 
   const q = query.trim();
   if (!q) return [];
 
-  return prisma.bloque.findMany({
+  return db.bloque.findMany({
     where: {
       OR: [
         { calle: { contains: q, mode: "insensitive" } },

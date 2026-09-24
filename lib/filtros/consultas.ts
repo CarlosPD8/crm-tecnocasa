@@ -1,6 +1,6 @@
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { condicionFecha, leerBool, leerFecha, leerMulti, leerRango } from "@/lib/filtros/tipos";
-import { FILTROS_BLOQUES, FILTROS_CLIENTES, FILTROS_INMUEBLES } from "@/lib/filtros/definiciones";
+import { FILTROS_BLOQUES, FILTROS_CLIENTES, FILTROS_INMUEBLES, SIN_ASESOR } from "@/lib/filtros/definiciones";
 import { TIPO_CLIENTE_LABELS, normalizarDni } from "@/lib/validations/cliente";
 import {
   ESTADO_INMUEBLE_LABELS,
@@ -49,6 +49,17 @@ function leerOrden<T extends Record<string, string>>(orden: T, valor: string | u
   return (valor && valor in orden ? valor : claves(orden)[0]) as keyof T;
 }
 
+/** Advisor filter: any of the chosen users, and/or records without advisor. */
+function asesor(valor: string | undefined) {
+  const lista = leerMulti(valor);
+  if (!lista.length) return null;
+  const ids = lista.filter((v) => v !== SIN_ASESOR);
+  return [
+    ...(ids.length ? [{ asesorId: { in: ids } }] : []),
+    ...(lista.includes(SIN_ASESOR) ? [{ asesorId: null }] : []),
+  ];
+}
+
 // ─── Clientes ───────────────────────────────────────────────────────────────
 
 export function consultaClientes(sp: SP) {
@@ -57,6 +68,9 @@ export function consultaClientes(sp: SP) {
 
   const tipos = leerMulti(sp.tipo, claves(TIPO_CLIENTE_LABELS));
   if (tipos.length) and.push({ tipos: { hasSome: tipos as (keyof typeof TIPO_CLIENTE_LABELS)[] } });
+
+  const asesores = asesor(sp.asesor);
+  if (asesores) and.push({ OR: asesores });
 
   const interes = leerMulti(sp.interes, claves(TIPO_OPERACION_LABELS));
   if (interes.length) {
@@ -118,6 +132,8 @@ export function consultaInmuebles(sp: SP) {
   if (localidades.length) and.push({ localidad: { in: localidades } });
   const ocup = ocupacion(sp.ocupacion);
   if (ocup) and.push({ OR: ocup });
+  const asesoresInm = asesor(sp.asesor);
+  if (asesoresInm) and.push({ OR: asesoresInm });
 
   const precio = rango(sp.precio);
   if (precio) and.push({ precio });
@@ -144,6 +160,7 @@ export function consultaInmuebles(sp: SP) {
     ...booleano(sp.citas, { eventos: { some: { fin: { gte: ahora } } } }, { eventos: { none: { fin: { gte: ahora } } } }),
     ...booleano(sp.fotos, { archivos: { some: { categoria: "FOTO" as const } } }, { archivos: { none: { categoria: "FOTO" as const } } }),
     ...booleano(sp.operaciones, { operaciones: { some: {} } }, { operaciones: { none: {} } }),
+    ...fecha(sp.finAlquiler, (c) => ({ fechaFinAlquiler: c })),
     ...fecha(sp.ultimo, (c) => ({ fechaUltimoContacto: c })),
     ...fecha(sp.alta, (c) => ({ createdAt: c ?? undefined })),
   );
@@ -176,6 +193,7 @@ export function consultaInmuebles(sp: SP) {
       { planta: { sort: "asc" as const, nulls: "last" as const } },
       { puerta: { sort: "asc" as const, nulls: "last" as const } },
     ],
+    finAlquiler: [{ fechaFinAlquiler: { sort: "asc" as const, nulls: "last" as const } }],
   }[orden];
 
   return { where: { AND: and } satisfies Prisma.InmuebleWhereInput, orderBy };

@@ -3,7 +3,7 @@ import { Building, Plus, SearchX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ENLACE_FILA, FILA_CLICABLE } from "@/components/shared/row-link";
 
-import { prisma } from "@/lib/prisma";
+import { getContexto } from "@/lib/db";
 import { resumenPorBloque } from "@/lib/bloques";
 import { formatBloque } from "@/lib/validations/bloque";
 import { Button } from "@/components/ui/button";
@@ -31,23 +31,24 @@ export default async function BloquesPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
+  const { db, esDirector } = await getContexto();
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? "1") || 1);
   const { where, orderBy } = consultaBloques(sp);
   const filtrado = Boolean(sp.q || contarFiltros("bloques", sp));
 
   const [bloques, total, localidades] = await Promise.all([
-    prisma.bloque.findMany({
+    db.bloque.findMany({
       where,
       orderBy,
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
       include: { _count: { select: { inmuebles: true } } },
     }),
-    prisma.bloque.count({ where }),
-    prisma.bloque.findMany({ distinct: ["localidad"], select: { localidad: true }, orderBy: { localidad: "asc" } }),
+    db.bloque.count({ where }),
+    db.bloque.findMany({ distinct: ["localidad"], select: { localidad: true }, orderBy: { localidad: "asc" } }),
   ]);
-  const resumen = await resumenPorBloque(bloques.map((b) => b.id));
+  const resumen = await resumenPorBloque(db, bloques.map((b) => b.id));
 
   return (
     <div className="flex flex-col gap-8">
@@ -71,6 +72,7 @@ export default async function BloquesPage({
       <div className="flex flex-col gap-4">
         <BarraFiltros
           entidad="bloques"
+          exportar={esDirector ? { total: total } : undefined}
           ariaBusqueda="Buscar bloques"
           placeholder="Calle, número, nombre o localidad…"
           opciones={{ localidad: Object.fromEntries(localidades.map((l) => [l.localidad, l.localidad])) }}

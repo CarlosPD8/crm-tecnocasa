@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { getContexto, opcionesAsesor } from "@/lib/db";
 import { InmuebleForm } from "@/components/inmuebles/inmueble-form";
 import { PageHeader } from "@/components/shared/page-header";
 
@@ -8,14 +8,18 @@ export default async function EditarInmueblePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const { db, esDirector } = await getContexto();
   const { id } = await params;
-  const inmueble = await prisma.inmueble.findUnique({
-    where: { id },
-    include: {
-      propietario: true,
-      bloque: { select: { id: true, calle: true, numero: true, localidad: true } },
-    },
-  });
+  const [inmueble, asesores] = await Promise.all([
+    db.inmueble.findUnique({
+      where: { id },
+      include: {
+        propietario: true,
+        bloque: { select: { id: true, calle: true, numero: true, localidad: true } },
+      },
+    }),
+    esDirector ? opcionesAsesor(db) : undefined,
+  ]);
 
   if (!inmueble) notFound();
   const { propietario, bloque, ...datos } = inmueble;
@@ -35,6 +39,7 @@ export default async function EditarInmueblePage({
             : null
         }
         bloqueInicial={bloque}
+        asesores={asesores}
       />
     </div>
   );

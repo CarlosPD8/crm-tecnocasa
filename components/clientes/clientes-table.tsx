@@ -17,11 +17,13 @@ import { EtiquetasCliente } from "@/components/clientes/etiquetas-cliente";
 import { cn } from "@/lib/utils";
 import type { Cliente } from "@/lib/generated/prisma/client";
 
+type ClienteFila = Cliente & { asesor?: { nombre: string } | null };
+
 export function ClientesTable({
   clientes,
   filtrado = false,
 }: {
-  clientes: Cliente[];
+  clientes: ClienteFila[];
   filtrado?: boolean;
 }) {
   if (clientes.length === 0) {
@@ -54,6 +56,7 @@ export function ClientesTable({
           <TableHead>Tipo</TableHead>
           <TableHead>Teléfono</TableHead>
           <TableHead>Email</TableHead>
+          <TableHead className="hidden lg:table-cell">Asesor</TableHead>
           <TableHead>Próximo contacto</TableHead>
         </TableRow>
       </TableHeader>
@@ -87,6 +90,7 @@ export function ClientesTable({
               </TableCell>
               <TableCell className="text-muted-foreground">{cliente.telefono ?? "—"}</TableCell>
               <TableCell className="text-muted-foreground">{cliente.email ?? "—"}</TableCell>
+              <TableCell className="hidden text-muted-foreground lg:table-cell">{cliente.asesor?.nombre ?? "—"}</TableCell>
               <TableCell>
                 {proximo ? (
                   <span

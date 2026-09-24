@@ -22,14 +22,28 @@ import {
   FormSection,
   FormShell,
 } from "@/components/shared/form";
+import { AsesorSelect } from "@/components/shared/asesor-select";
 import type { Cliente } from "@/lib/generated/prisma/client";
+import type { OpcionAsesor } from "@/lib/db";
 
 function toDateInputValue(date: Date | null | undefined) {
   if (!date) return "";
   return new Date(date).toISOString().slice(0, 10);
 }
 
-export function ClienteForm({ cliente }: { cliente?: Cliente }) {
+/**
+ * `asesores` is only passed to directors: it shows the advisor picker, which
+ * starts on the current advisor (editing) or on `asesorInicial` (new client).
+ */
+export function ClienteForm({
+  cliente,
+  asesores,
+  asesorInicial,
+}: {
+  cliente?: Cliente;
+  asesores?: OpcionAsesor[];
+  asesorInicial?: string;
+}) {
   const router = useRouter();
   const {
     register,
@@ -50,9 +64,11 @@ export function ClienteForm({ cliente }: { cliente?: Cliente }) {
           tipos: ordenarEtiquetas(cliente.tipos),
           notas: cliente.notas ?? "",
           fechaProximoContacto: toDateInputValue(cliente.fechaProximoContacto),
+          ...(asesores ? { asesorId: cliente.asesorId ?? "" } : {}),
         }
       : {
           tipos: ["COMPRADOR"],
+          ...(asesores ? { asesorId: asesorInicial ?? "" } : {}),
         },
   });
 
@@ -66,7 +82,9 @@ export function ClienteForm({ cliente }: { cliente?: Cliente }) {
       for (const [campo, mensajes] of Object.entries(result.error)) {
         if (mensajes?.[0]) setError(campo as keyof ClienteInput, { message: mensajes[0] });
       }
-      toast.error("Revisa los datos del formulario.");
+      // Errors not tied to a field (e.g. the record was deleted meanwhile).
+      const general = "_" in result.error ? result.error._?.[0] : undefined;
+      toast.error(general ?? "Revisa los datos del formulario.");
       return;
     }
 
@@ -151,6 +169,26 @@ export function ClienteForm({ cliente }: { cliente?: Cliente }) {
         >
           <Input id="fechaProximoContacto" type="date" {...register("fechaProximoContacto")} />
         </Field>
+        {asesores && (
+          <Field
+            label="Asesor responsable"
+            error={errors.asesorId?.message}
+            hint="Quién lleva a este cliente."
+          >
+            <Controller
+              control={control}
+              name="asesorId"
+              render={({ field }) => (
+                <AsesorSelect
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  asesores={asesores}
+                  invalid={!!errors.asesorId}
+                />
+              )}
+            />
+          </Field>
+        )}
         <Field label="Notas" htmlFor="notas" optional className="sm:col-span-2">
           <Textarea
             id="notas"

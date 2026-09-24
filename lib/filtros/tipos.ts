@@ -60,6 +60,8 @@ export const PRESETS_FECHA = {
   hoy: "Hoy",
   proximos7: "Próximos 7 días",
   proximos30: "Próximos 30 días",
+  proximos90: "Próximos 90 días",
+  pasados: "Ya pasada",
   ultimos7: "Últimos 7 días",
   ultimos30: "Últimos 30 días",
   esteMes: "Este mes",
@@ -128,6 +130,10 @@ export function leerFecha(valor: string | undefined, ahora = new Date()): RangoF
         return { desde: hoy, hasta: sumarDias(hoy, 7) };
       case "proximos30":
         return { desde: hoy, hasta: sumarDias(hoy, 30) };
+      case "proximos90":
+        return { desde: hoy, hasta: sumarDias(hoy, 90) };
+      case "pasados":
+        return { hasta: sumarDias(hoy, -1) };
       case "ultimos7":
         return { desde: sumarDias(hoy, -7), hasta: hoy };
       case "ultimos30":

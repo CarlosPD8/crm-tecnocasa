@@ -66,13 +66,14 @@ export function aValor(fecha: Date, todoElDia: boolean) {
 }
 
 /** What the calendar shows, whatever table it comes from. */
-export type FuenteCalendario = "evento" | "proximo" | "contacto" | "operacion";
+export type FuenteCalendario = "evento" | "proximo" | "contacto" | "operacion" | "finAlquiler";
 
 export const FUENTE_LABELS: Record<FuenteCalendario, string> = {
   evento: "Eventos",
   proximo: "Próximos contactos",
   contacto: "Contactos hechos",
   operacion: "Operaciones",
+  finAlquiler: "Fin de alquiler",
 };
 
 export type ItemCalendario = {
@@ -86,4 +87,8 @@ export type ItemCalendario = {
   notas?: string | null;
   cliente?: { id: string; nombre: string } | null;
   inmueble?: { id: string; referencia: string } | null;
+  /** Who created the event or logged the contact/deal (null for older records). */
+  autor?: string | null;
+  /** Events only: directors delete any, advisors their own. */
+  puedeEliminar?: boolean;
 };

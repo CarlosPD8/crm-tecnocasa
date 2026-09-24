@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth/require-session";
+import { existe, getContexto } from "@/lib/db";
 import {
   contactoInmuebleSchema,
   contactoSchema,
@@ -11,19 +10,22 @@ import {
 } from "@/lib/validations/contacto";
 
 export async function crearContacto(clienteId: string, data: ContactoInput) {
-  await requireSession();
+  const { db } = await getContexto();
   const parsed = contactoSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
   }
+  if (!(await existe(db, "cliente", clienteId))) {
+    return { success: false as const, error: { nota: ["Este cliente ya no existe."] } };
+  }
 
   const ahora = new Date();
 
-  await prisma.$transaction([
-    prisma.contacto.create({
+  await db.$transaction([
+    db.contacto.create({
       data: { clienteId, nota: parsed.data.nota, fecha: ahora },
     }),
-    prisma.cliente.update({
+    db.cliente.update({
       where: { id: clienteId },
       data: { fechaUltimoContacto: ahora },
     }),
@@ -39,16 +41,22 @@ export async function crearContacto(clienteId: string, data: ContactoInput) {
  * dates move together.
  */
 export async function crearContactoInmueble(inmuebleId: string, data: ContactoInmuebleInput) {
-  await requireSession();
+  const { db } = await getContexto();
   const parsed = contactoInmuebleSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
   }
 
   const clienteId = parsed.data.clienteId || null;
+  if (!(await existe(db, "inmueble", inmuebleId))) {
+    return { success: false as const, error: { nota: ["Este inmueble ya no existe."] } };
+  }
+  if (clienteId && !(await existe(db, "cliente", clienteId))) {
+    return { success: false as const, error: { clienteId: ["Ese cliente ya no existe."] } };
+  }
   const ahora = new Date();
 
-  const inmueble = await prisma.$transaction(async (tx) => {
+  const inmueble = await db.$transaction(async (tx) => {
     await tx.contacto.create({
       data: { inmuebleId, clienteId, nota: parsed.data.nota, fecha: ahora },
     });

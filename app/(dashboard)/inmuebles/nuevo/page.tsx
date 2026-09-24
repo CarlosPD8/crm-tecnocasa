@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { getContexto, opcionesAsesor } from "@/lib/db";
 import { InmuebleForm } from "@/components/inmuebles/inmueble-form";
 import { PageHeader } from "@/components/shared/page-header";
 import { formatBloque } from "@/lib/validations/bloque";
@@ -8,21 +8,23 @@ export default async function NuevoInmueblePage({
 }: {
   searchParams: Promise<{ bloque?: string; propietario?: string }>;
 }) {
+  const { db, esDirector, usuario } = await getContexto();
   const { bloque: bloqueId, propietario: propietarioId } = await searchParams;
-  const [bloque, propietario] = await Promise.all([
+  const [bloque, propietario, asesores] = await Promise.all([
     bloqueId
-      ? prisma.bloque.findUnique({
+      ? db.bloque.findUnique({
           where: { id: bloqueId },
           select: { id: true, calle: true, numero: true, localidad: true },
         })
       : null,
     // «Añadir inmueble» from a client's page: start with them as owner.
     propietarioId
-      ? prisma.cliente.findUnique({
+      ? db.cliente.findUnique({
           where: { id: propietarioId },
           select: { id: true, nombre: true, apellidos: true },
         })
       : null,
+    esDirector ? opcionesAsesor(db) : undefined,
   ]);
 
   const back = bloque
@@ -47,6 +49,8 @@ export default async function NuevoInmueblePage({
       <InmuebleForm
         bloqueInicial={bloque}
         propietarioInicial={propietario ? { id: propietario.id, label: `${propietario.nombre} ${propietario.apellidos}` } : null}
+        asesores={asesores}
+        asesorInicial={usuario.id}
       />
     </div>
   );

@@ -20,6 +20,7 @@ const ENCABEZADO = {
   proximo: "Próximo contacto",
   contacto: "Contacto registrado",
   operacion: "Operación cerrada",
+  finAlquiler: "Fin de alquiler",
   evento: "Evento",
 } as const;
 
@@ -49,6 +50,10 @@ function Detalle({ item, onClose }: { item: ItemCalendario; onClose: () => void 
         <p className="rounded-lg bg-surface px-3 py-2.5 text-sm whitespace-pre-line">
           {item.fuente === "proximo" ? `Teléfono: ${item.notas}` : item.notas}
         </p>
+      )}
+
+      {item.autor && (
+        <p className="text-xs text-muted-foreground">Registrado por {item.autor}</p>
       )}
 
       {item.fuente === "proximo" && (

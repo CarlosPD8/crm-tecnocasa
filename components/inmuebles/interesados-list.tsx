@@ -47,7 +47,7 @@ export function InteresadosList({
     startTransition(async () => {
       const result = await quitarInteres(interesId);
       if (!result.success) {
-        toast.error("No se pudo quitar el interés.");
+        toast.error(result.error);
         return;
       }
       toast.success("Interés eliminado.");

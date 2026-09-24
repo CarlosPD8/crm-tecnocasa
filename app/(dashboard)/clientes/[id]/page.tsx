@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { format } from "date-fns";
 import { Pencil, Plus } from "lucide-react";
 
-import { prisma } from "@/lib/prisma";
+import { getContexto } from "@/lib/db";
 import { getUrlFirmadaDocumento } from "@/lib/supabase/storage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,26 +27,33 @@ import { InteresesList } from "@/components/clientes/intereses-list";
 import { InmueblesTable } from "@/components/inmuebles/inmuebles-table";
 import { EtiquetasCliente, textoEtiquetas } from "@/components/clientes/etiquetas-cliente";
 import { subirArchivoCliente } from "@/lib/actions/archivos";
+import { AltaPor } from "@/components/shared/alta-por";
 
 export default async function ClienteDetallePage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const { db, usuario, esDirector } = await getContexto();
   const { id } = await params;
 
-  const cliente = await prisma.cliente.findUnique({
+  const cliente = await db.cliente.findUnique({
     where: { id },
     include: {
       contactos: {
         orderBy: { fecha: "desc" },
-        include: { inmueble: { select: { id: true, referencia: true } } },
+        include: {
+          inmueble: { select: { id: true, referencia: true } },
+          creadoPor: { select: { nombre: true } },
+        },
       },
       archivos: { orderBy: { orden: "asc" } },
+      asesor: { select: { nombre: true } },
+      creadoPor: { select: { nombre: true } },
       intereses: { include: { inmueble: true }, orderBy: { fecha: "desc" } },
       operaciones: { include: { inmueble: true }, orderBy: { fecha: "desc" } },
       inmueblesEnPropiedad: {
-        include: { bloque: { select: { id: true, calle: true, numero: true } } },
+        include: { bloque: { select: { id: true, calle: true, numero: true } }, asesor: { select: { nombre: true } } },
         orderBy: { referencia: "asc" },
       },
     },
@@ -60,6 +67,7 @@ export default async function ClienteDetallePage({
       nombreOriginal: archivo.nombreOriginal,
       tamanioBytes: archivo.tamanioBytes,
       url: await getUrlFirmadaDocumento(archivo.path),
+      puedeEliminar: esDirector || archivo.creadoPorId === usuario.id,
     }))
   );
 
@@ -74,10 +82,12 @@ export default async function ClienteDetallePage({
         description={[cliente.telefono, cliente.email].filter(Boolean).join(" · ") || undefined}
         actions={
           <>
-            <EliminarClienteDialog
-              clienteId={cliente.id}
-              nombreCompleto={`${cliente.nombre} ${cliente.apellidos}`}
-            />
+            {esDirector && (
+              <EliminarClienteDialog
+                clienteId={cliente.id}
+                nombreCompleto={`${cliente.nombre} ${cliente.apellidos}`}
+              />
+            )}
             <Button
               variant="outline"
               size="lg"
@@ -136,6 +146,10 @@ export default async function ClienteDetallePage({
                       ? format(cliente.fechaProximoContacto, "dd/MM/yyyy")
                       : "—"}
                   </span>
+                </DataItem>
+                <DataItem label="Asesor responsable">{cliente.asesor?.nombre ?? "—"}</DataItem>
+                <DataItem label="Alta">
+                  <AltaPor nombre={cliente.creadoPor?.nombre} fecha={cliente.createdAt} />
                 </DataItem>
                 <DataItem label="Notas" className="sm:col-span-2 lg:col-span-3">
                   <p className="max-w-[70ch] whitespace-pre-wrap leading-relaxed">

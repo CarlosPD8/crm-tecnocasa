@@ -2,14 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus } from "lucide-react";
 
-import { prisma } from "@/lib/prisma";
+import { getContexto, opcionesAsesor } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { BarraFiltros } from "@/components/shared/filtros/barra-filtros";
 import { ClientesTable } from "@/components/clientes/clientes-table";
 import { Pagination } from "@/components/shared/pagination";
 import { PageHeader } from "@/components/shared/page-header";
 import { consultaClientes } from "@/lib/filtros/consultas";
-import { contarFiltros, paramsDeFiltros } from "@/lib/filtros/definiciones";
+import { contarFiltros, paramsDeFiltros, opcionesFiltroAsesor } from "@/lib/filtros/definiciones";
 
 const PAGE_SIZE = 20;
 
@@ -18,6 +18,7 @@ export default async function ClientesPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
+  const { db, esDirector } = await getContexto();
   const sp = await searchParams;
   // Old dashboard links: «pending follow-up» is now a regular filter.
   if (sp.seguimiento === "pendiente") redirect("/clientes?proximo=p:vencido&orden=proximo");
@@ -26,14 +27,16 @@ export default async function ClientesPage({
   const { where, orderBy } = consultaClientes(sp);
   const filtrado = Boolean(sp.q || contarFiltros("clientes", sp));
 
-  const [clientes, total] = await Promise.all([
-    prisma.cliente.findMany({
+  const [clientes, total, asesores] = await Promise.all([
+    db.cliente.findMany({
       where,
       orderBy,
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
+      include: { asesor: { select: { nombre: true } } },
     }),
-    prisma.cliente.count({ where }),
+    db.cliente.count({ where }),
+    opcionesAsesor(db),
   ]);
 
   return (
@@ -58,6 +61,8 @@ export default async function ClientesPage({
       <div className="flex flex-col gap-4">
         <BarraFiltros
           entidad="clientes"
+          exportar={esDirector ? { total: total } : undefined}
+          opciones={{ asesor: opcionesFiltroAsesor(asesores) }}
           ariaBusqueda="Buscar clientes"
           placeholder="Nombre, teléfono, email o DNI…"
         />

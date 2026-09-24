@@ -17,7 +17,7 @@ import type {
 import type { EventResizeDoneArg } from "@fullcalendar/interaction";
 import { addDays, addHours, format } from "date-fns";
 import { es } from "date-fns/locale";
-import { Check, ChevronLeft, ChevronRight, Handshake, LoaderCircle, Phone, Plus } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Handshake, KeyRound, LoaderCircle, Phone, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { moverEvento, moverProximoContacto, obtenerCalendario } from "@/lib/actions/eventos";
@@ -58,7 +58,7 @@ function aEventoFC(item: ItemCalendario): EventInput {
 function ContenidoEvento({ event, timeText }: EventContentArg) {
   // The selection preview («mirror») is a bare event without CRM data.
   const item = event.extendedProps.item as ItemCalendario | undefined;
-  const Icono = item ? { proximo: Phone, contacto: Check, operacion: Handshake, evento: null }[item.fuente] : null;
+  const Icono = item ? { proximo: Phone, contacto: Check, operacion: Handshake, finAlquiler: KeyRound, evento: null }[item.fuente] : null;
   return (
     <span className="ev-contenido">
       {Icono && <Icono aria-hidden className="ev-icono" />}
@@ -125,6 +125,8 @@ export default function Calendario() {
       notas: item.notas ?? "",
       cliente: item.cliente ? { id: item.cliente.id, label: item.cliente.nombre } : null,
       inmueble: item.inmueble ? { id: item.inmueble.id, label: item.inmueble.referencia } : null,
+      autor: item.autor,
+      puedeEliminar: item.puedeEliminar,
     });
   }
 

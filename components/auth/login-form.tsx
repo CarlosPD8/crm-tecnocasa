@@ -28,7 +28,11 @@ export function LoginForm() {
     const { error } = await supabase.auth.signInWithPassword(data);
 
     if (error) {
-      setAuthError("Email o contraseña incorrectos.");
+      setAuthError(
+        error.code === "user_banned"
+          ? "Tu acceso está desactivado. Habla con el director de tu oficina."
+          : "Email o contraseña incorrectos."
+      );
       return;
     }
 

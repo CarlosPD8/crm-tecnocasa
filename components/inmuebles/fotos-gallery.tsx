@@ -12,6 +12,8 @@ export type FotoInmueble = {
   id: string;
   url: string;
   nombreOriginal: string;
+  /** Directors delete any photo; advisors only their own. */
+  puedeEliminar: boolean;
 };
 
 const botonFoto =
@@ -31,7 +33,7 @@ export function FotosGallery({ fotos }: { fotos: FotoInmueble[] }) {
     startTransition(async () => {
       const result = await eliminarArchivo(id);
       if (!result.success) {
-        toast.error("No se pudo eliminar la foto.");
+        toast.error(result.error);
         return;
       }
       toast.success("Foto eliminada.");
@@ -101,15 +103,17 @@ export function FotosGallery({ fotos }: { fotos: FotoInmueble[] }) {
                 <ChevronRight />
               </button>
             </div>
-            <button
-              type="button"
-              className={cn(botonFoto, "hover:text-destructive")}
-              aria-label={`Eliminar foto ${foto.nombreOriginal}`}
-              disabled={isPending}
-              onClick={() => eliminar(foto.id)}
-            >
-              <Trash2 />
-            </button>
+            {foto.puedeEliminar && (
+              <button
+                type="button"
+                className={cn(botonFoto, "hover:text-destructive")}
+                aria-label={`Eliminar foto ${foto.nombreOriginal}`}
+                disabled={isPending}
+                onClick={() => eliminar(foto.id)}
+              >
+                <Trash2 />
+              </button>
+            )}
           </div>
         </li>
       ))}

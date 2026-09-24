@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Home, Pencil, Plus } from "lucide-react";
 
-import { prisma } from "@/lib/prisma";
+import { getContexto } from "@/lib/db";
 import { resumenPorBloque } from "@/lib/bloques";
 import { formatBloque } from "@/lib/validations/bloque";
 import {
@@ -38,9 +38,10 @@ const formatoPrecio = new Intl.NumberFormat("es-ES", {
 const ORDEN_OCUPACION: OcupacionForm[] = ["PROPIETARIO", "INQUILINOS", "VACIO", "SIN_DATOS"];
 
 export default async function BloqueDetallePage({ params }: { params: Promise<{ id: string }> }) {
+  const { db, esDirector } = await getContexto();
   const { id } = await params;
 
-  const bloque = await prisma.bloque.findUnique({
+  const bloque = await db.bloque.findUnique({
     where: { id },
     include: {
       inmuebles: {
@@ -57,7 +58,7 @@ export default async function BloqueDetallePage({ params }: { params: Promise<{ 
 
   if (!bloque) notFound();
 
-  const resumen = (await resumenPorBloque([bloque.id])).get(bloque.id)!;
+  const resumen = (await resumenPorBloque(db, [bloque.id])).get(bloque.id)!;
   const direccion = formatBloque(bloque);
   const detalles = [bloque.nombre, bloque.localidad, bloque.codigoPostal].filter(Boolean).join(" · ");
 
@@ -70,7 +71,9 @@ export default async function BloqueDetallePage({ params }: { params: Promise<{ 
         description={detalles}
         actions={
           <>
-            <EliminarBloqueDialog bloqueId={bloque.id} direccion={direccion} pisos={bloque.inmuebles.length} />
+            {esDirector && (
+              <EliminarBloqueDialog bloqueId={bloque.id} direccion={direccion} pisos={bloque.inmuebles.length} />
+            )}
             <Button
               variant="outline"
               size="lg"

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, useWatch, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
@@ -37,7 +37,9 @@ import {
   FormShell,
   Segmented,
 } from "@/components/shared/form";
+import { AsesorSelect } from "@/components/shared/asesor-select";
 import type { Inmueble } from "@/lib/generated/prisma/client";
+import type { OpcionAsesor } from "@/lib/db";
 
 // `precio` es un Decimal de Prisma, no serializable al cruzar de Server a
 // Client Component: el llamador debe convertirlo a string antes de pasarlo.
@@ -45,14 +47,22 @@ export type InmuebleParaFormulario = Omit<Inmueble, "precio"> & { precio: string
 
 const SI_NO = { SI: "Sí", NO: "No" } as const;
 
+/**
+ * `asesores` is only passed to directors: it shows the advisor picker, which
+ * starts on the current advisor (editing) or on `asesorInicial` (new property).
+ */
 export function InmuebleForm({
   inmueble,
   propietarioInicial,
   bloqueInicial,
+  asesores,
+  asesorInicial,
 }: {
   inmueble?: InmuebleParaFormulario;
   propietarioInicial?: { id: string; label: string } | null;
   bloqueInicial?: BloqueSeleccionado | null;
+  asesores?: OpcionAsesor[];
+  asesorInicial?: string;
 }) {
   const router = useRouter();
   const [propietario, setPropietario] = useState<{ id: string; label: string } | null>(
@@ -88,6 +98,8 @@ export function InmuebleForm({
           puerta: inmueble.puerta ?? "",
           ocupacion: inmueble.ocupacion ?? "SIN_DATOS",
           adquisicionPotencial: inmueble.adquisicionPotencial,
+          fechaFinAlquiler: inmueble.fechaFinAlquiler?.toISOString().slice(0, 10) ?? "",
+          ...(asesores ? { asesorId: inmueble.asesorId ?? "" } : {}),
         }
       : {
           tipoInmueble: "PISO",
@@ -98,8 +110,13 @@ export function InmuebleForm({
           localidad: bloqueInicial?.localidad ?? "",
           ocupacion: "SIN_DATOS",
           adquisicionPotencial: false,
+          ...(asesores ? { asesorId: asesorInicial ?? "" } : {}),
         },
   });
+
+  // The lease end date only makes sense for a rented property; a hidden value is kept.
+  const [ocupacionActual, estadoActual] = useWatch({ control, name: ["ocupacion", "estado"] });
+  const conAlquiler = ocupacionActual === "INQUILINOS" || estadoActual === "ALQUILADO";
 
   function cambiarBloque(siguiente: BloqueSeleccionado | null) {
     // Prefill address/locality only when they are empty or still show the
@@ -221,6 +238,22 @@ export function InmuebleForm({
             )}
           />
         </Field>
+        {conAlquiler && (
+          <Field
+            label="Fin del alquiler"
+            htmlFor="fechaFinAlquiler"
+            optional
+            error={errors.fechaFinAlquiler?.message}
+            hint="Aparecerá en el panel y en el calendario cuando se acerque."
+          >
+            <Input
+              id="fechaFinAlquiler"
+              type="date"
+              aria-invalid={!!errors.fechaFinAlquiler}
+              {...register("fechaFinAlquiler")}
+            />
+          </Field>
+        )}
         <Field label="Adquisición potencial" hint="Marca los pisos que podrían captarse para la cartera.">
           <Controller
             control={control}
@@ -335,7 +368,10 @@ export function InmuebleForm({
         </Field>
       </FormSection>
 
-      <FormSection title="Propietario" description="Cliente de la cartera que ha encargado la venta o el alquiler.">
+      <FormSection
+        title={asesores ? "Propietario y asesor" : "Propietario"}
+        description="Cliente de la cartera que ha encargado la venta o el alquiler."
+      >
         <Field label="Cliente propietario" optional className="sm:col-span-2">
           <ClientePicker
             value={propietario?.id ?? null}
@@ -344,6 +380,26 @@ export function InmuebleForm({
             placeholder="Buscar en clientes…"
           />
         </Field>
+        {asesores && (
+          <Field
+            label="Asesor responsable"
+            error={errors.asesorId?.message}
+            hint="Quién lleva este inmueble."
+          >
+            <Controller
+              control={control}
+              name="asesorId"
+              render={({ field }) => (
+                <AsesorSelect
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  asesores={asesores}
+                  invalid={!!errors.asesorId}
+                />
+              )}
+            />
+          </Field>
+        )}
       </FormSection>
 
       <FormActions>

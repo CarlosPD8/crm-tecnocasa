@@ -7,7 +7,7 @@ export default function CalendarioPage() {
       <PageHeader
         eyebrow="Agenda"
         title="Calendario"
-        description="Tus citas junto a los próximos contactos, los contactos hechos y las operaciones. Selecciona un hueco para crear un evento y arrástralo o estíralo para cambiarlo."
+        description="Tus citas junto a los próximos contactos, los contactos hechos, las operaciones y los fines de alquiler. Selecciona un hueco para crear un evento y arrástralo o estíralo para cambiarlo."
       />
       <CalendarioVista />
     </div>

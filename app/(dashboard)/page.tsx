@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { differenceInCalendarDays, format, isToday, subDays } from "date-fns";
 import { es } from "date-fns/locale";
-import { ArrowUpRight, CalendarCheck, Handshake, Home, PhoneCall } from "lucide-react";
+import { ArrowUpRight, CalendarCheck, Handshake, Home, KeyRound, PhoneCall } from "lucide-react";
 
-import { prisma } from "@/lib/prisma";
+import { getContexto } from "@/lib/db";
 import { cn } from "@/lib/utils";
+import { hoyISO } from "@/lib/filtros/tipos";
+import { FinAlquiler } from "@/components/inmuebles/situacion";
 import { PageHeader } from "@/components/shared/page-header";
 import {
   TIPO_INMUEBLE_LABELS,
@@ -28,9 +30,12 @@ function iniciales(nombre: string, apellidos: string) {
 }
 
 export default async function DashboardPage() {
+  const { db } = await getContexto();
   const ahora = new Date();
   const finDeHoy = new Date(ahora);
   finDeHoy.setHours(23, 59, 59, 999);
+  const hoyUTC = new Date(`${hoyISO(ahora)}T00:00:00.000Z`);
+  const finAlquilerProximo = { gte: hoyUTC, lt: new Date(hoyUTC.getTime() + 91 * 24 * 60 * 60 * 1000) };
 
   const [
     totalClientes,
@@ -41,31 +46,40 @@ export default async function DashboardPage() {
     proximos,
     inmueblesDisponibles,
     operacionesRecientes,
+    finesAlquiler,
+    finesAlquilerTotal,
   ] = await Promise.all([
-    prisma.cliente.count(),
-    prisma.inmueble.count({ where: { estado: "DISPONIBLE" } }),
-    prisma.cliente.count({ where: { fechaProximoContacto: { lte: finDeHoy } } }),
-    prisma.operacion.count({ where: { fecha: { gte: subDays(ahora, 30) } } }),
-    prisma.cliente.findMany({
+    db.cliente.count(),
+    db.inmueble.count({ where: { estado: "DISPONIBLE" } }),
+    db.cliente.count({ where: { fechaProximoContacto: { lte: finDeHoy } } }),
+    db.operacion.count({ where: { fecha: { gte: subDays(ahora, 30) } } }),
+    db.cliente.findMany({
       where: { fechaProximoContacto: { lte: finDeHoy } },
       orderBy: { fechaProximoContacto: "asc" },
       take: 6,
     }),
-    prisma.cliente.findMany({
+    db.cliente.findMany({
       where: { fechaProximoContacto: { gt: finDeHoy } },
       orderBy: { fechaProximoContacto: "asc" },
       take: 6,
     }),
-    prisma.inmueble.findMany({
+    db.inmueble.findMany({
       where: { estado: "DISPONIBLE" },
       orderBy: { createdAt: "desc" },
       take: 5,
     }),
-    prisma.operacion.findMany({
+    db.operacion.findMany({
       orderBy: { fecha: "desc" },
       take: 5,
       include: { cliente: true, inmueble: true },
     }),
+    db.inmueble.findMany({
+      where: { fechaFinAlquiler: finAlquilerProximo },
+      orderBy: { fechaFinAlquiler: "asc" },
+      take: 6,
+      select: { id: true, referencia: true, direccion: true, localidad: true, fechaFinAlquiler: true },
+    }),
+    db.inmueble.count({ where: { fechaFinAlquiler: finAlquilerProximo } }),
   ]);
 
   const fechaLarga = format(ahora, "EEEE, d 'de' MMMM", { locale: es });
@@ -221,6 +235,30 @@ export default async function DashboardPage() {
                   );
                 })}
               </ol>
+            )}
+          </Panel>
+
+          <Panel
+            title="Alquileres que terminan pronto"
+            action={
+              finesAlquilerTotal > 0
+                ? { href: "/inmuebles?finAlquiler=p:proximos90&orden=finAlquiler", label: finesAlquilerTotal > finesAlquiler.length ? `Ver los ${finesAlquilerTotal}` : "Ver en inmuebles" }
+                : undefined
+            }
+          >
+            {finesAlquiler.length === 0 ? (
+              <PanelEmpty icon={KeyRound} text="Ningún alquiler termina en los próximos 90 días." />
+            ) : (
+              finesAlquiler.map((inmueble) => (
+                <Row key={inmueble.id} href={`/inmuebles/${inmueble.id}`}>
+                  <span className="w-20 shrink-0 font-mono text-xs text-muted-foreground">{inmueble.referencia}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{inmueble.direccion}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{inmueble.localidad}</span>
+                  </span>
+                  <FinAlquiler fecha={inmueble.fechaFinAlquiler} className="shrink-0 justify-end text-xs" />
+                </Row>
+              ))
             )}
           </Panel>
 

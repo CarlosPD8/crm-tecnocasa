@@ -319,6 +319,8 @@
 .leyenda-contacto { --ev: oklch(0.6 0.02 80); }
 .calendario .ev-operacion,
 .leyenda-operacion { --ev: oklch(0.6 0.12 75); }
+.calendario .ev-finAlquiler,
+.leyenda-finAlquiler { --ev: oklch(0.55 0.1 30); }
 .leyenda-evento { --ev: var(--primary); }
 .dark .calendario .ev-reunion { --ev: oklch(0.72 0.1 250); }
 .dark .calendario .ev-firma { --ev: oklch(0.72 0.12 320); }

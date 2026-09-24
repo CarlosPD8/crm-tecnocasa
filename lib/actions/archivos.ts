@@ -1,26 +1,29 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth/require-session";
+import { existe, getContexto, SIN_PERMISO } from "@/lib/db";
 import {
   subirArchivoStorage,
   eliminarArchivoStorage,
   getUrlPublicaFoto,
+  rutaArchivo,
   BUCKET_DOCUMENTOS,
   BUCKET_FOTOS,
 } from "@/lib/supabase/storage";
 import type { CategoriaArchivo } from "@/lib/generated/prisma/enums";
 
 export async function subirArchivoCliente(clienteId: string, formData: FormData) {
-  await requireSession();
+  const { db, oficinaId } = await getContexto();
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     return { success: false as const, error: "Selecciona un archivo." };
   }
+  if (!(await existe(db, "cliente", clienteId))) {
+    return { success: false as const, error: "Este cliente ya no existe." };
+  }
 
-  const path = `${clienteId}/${crypto.randomUUID()}-${file.name}`;
+  const path = rutaArchivo(oficinaId, clienteId, file.name);
 
   try {
     await subirArchivoStorage(BUCKET_DOCUMENTOS, path, file);
@@ -29,7 +32,7 @@ export async function subirArchivoCliente(clienteId: string, formData: FormData)
   }
 
   try {
-    await prisma.archivo.create({
+    await db.archivo.create({
       data: {
         categoria: "DOCUMENTO",
         clienteId,
@@ -54,15 +57,18 @@ export async function subirArchivoInmueble(
   categoria: CategoriaArchivo,
   formData: FormData
 ) {
-  await requireSession();
+  const { db, oficinaId } = await getContexto();
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
     return { success: false as const, error: "Selecciona un archivo." };
   }
+  if (!(await existe(db, "inmueble", inmuebleId))) {
+    return { success: false as const, error: "Este inmueble ya no existe." };
+  }
 
   const bucket = categoria === "FOTO" ? BUCKET_FOTOS : BUCKET_DOCUMENTOS;
-  const path = `${inmuebleId}/${crypto.randomUUID()}-${file.name}`;
+  const path = rutaArchivo(oficinaId, inmuebleId, file.name);
 
   try {
     await subirArchivoStorage(bucket, path, file);
@@ -71,12 +77,12 @@ export async function subirArchivoInmueble(
   }
 
   try {
-    const { _max } = await prisma.archivo.aggregate({
+    const { _max } = await db.archivo.aggregate({
       where: { inmuebleId, categoria },
       _max: { orden: true },
     });
 
-    await prisma.archivo.create({
+    await db.archivo.create({
       data: {
         categoria,
         inmuebleId,
@@ -98,15 +104,18 @@ export async function subirArchivoInmueble(
   return { success: true as const };
 }
 
+/** Directors delete any file; advisors only the ones they uploaded. */
 export async function eliminarArchivo(archivoId: string) {
-  await requireSession();
+  const { db, usuario, esDirector } = await getContexto();
 
-  const archivo = await prisma.archivo.findUniqueOrThrow({
+  const archivo = await db.archivo.findUnique({
     where: { id: archivoId },
   });
+  if (!archivo) return { success: false as const, error: "Este archivo ya no existe." };
+  if (!esDirector && archivo.creadoPorId !== usuario.id) return SIN_PERMISO;
 
   await eliminarArchivoStorage(archivo.bucket, archivo.path);
-  await prisma.archivo.delete({ where: { id: archivoId } });
+  await db.archivo.deleteMany({ where: { id: archivoId } });
 
   if (archivo.clienteId) revalidatePath(`/clientes/${archivo.clienteId}`);
   if (archivo.inmuebleId) revalidatePath(`/inmuebles/${archivo.inmuebleId}`);
@@ -114,17 +123,17 @@ export async function eliminarArchivo(archivoId: string) {
 }
 
 export async function moverFoto(archivoId: string, direccion: "arriba" | "abajo") {
-  await requireSession();
+  const { db } = await getContexto();
 
-  const archivo = await prisma.archivo.findUniqueOrThrow({
+  const archivo = await db.archivo.findUnique({
     where: { id: archivoId },
   });
 
-  if (!archivo.inmuebleId || archivo.categoria !== "FOTO") {
+  if (!archivo?.inmuebleId || archivo.categoria !== "FOTO") {
     return { success: false as const, error: "No es una foto de inmueble." };
   }
 
-  const vecino = await prisma.archivo.findFirst({
+  const vecino = await db.archivo.findFirst({
     where: {
       inmuebleId: archivo.inmuebleId,
       categoria: "FOTO",
@@ -135,9 +144,9 @@ export async function moverFoto(archivoId: string, direccion: "arriba" | "abajo"
 
   if (!vecino) return { success: true as const };
 
-  await prisma.$transaction([
-    prisma.archivo.update({ where: { id: archivo.id }, data: { orden: vecino.orden } }),
-    prisma.archivo.update({ where: { id: vecino.id }, data: { orden: archivo.orden } }),
+  await db.$transaction([
+    db.archivo.update({ where: { id: archivo.id }, data: { orden: vecino.orden } }),
+    db.archivo.update({ where: { id: vecino.id }, data: { orden: archivo.orden } }),
   ]);
 
   revalidatePath(`/inmuebles/${archivo.inmuebleId}`);

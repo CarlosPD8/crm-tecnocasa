@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth/require-session";
+import { existe, getContexto, resolverAsesor, SIN_PERMISO, type DbOficina } from "@/lib/db";
 import { inmuebleSchema, type InmuebleInput } from "@/lib/validations/inmueble";
 
 function toNullable(value: string | undefined) {
@@ -35,13 +34,33 @@ function buildData(data: InmuebleInput) {
     puerta: toNullable(data.puerta?.trim()),
     ocupacion: data.ocupacion === "SIN_DATOS" ? null : data.ocupacion,
     adquisicionPotencial: data.adquisicionPotencial,
+    // Date only: stored as UTC midnight of that day.
+    fechaFinAlquiler: data.fechaFinAlquiler ? new Date(`${data.fechaFinAlquiler}T00:00:00.000Z`) : null,
   };
 }
 
+type DatosInmueble = ReturnType<typeof buildData>;
+
+/** Field errors for a duplicate reference or links to rows outside the office. */
+async function comprobarDatos(db: DbOficina, datos: DatosInmueble, excluirId?: string) {
+  const duplicado = await db.inmueble.findFirst({
+    where: { referencia: datos.referencia, ...(excluirId ? { NOT: { id: excluirId } } : {}) },
+    select: { id: true },
+  });
+  if (duplicado) return { referencia: ["Ya existe un inmueble con esta referencia."] };
+  if (datos.propietarioId && !(await existe(db, "cliente", datos.propietarioId))) {
+    return { propietarioId: ["El propietario ya no existe."] };
+  }
+  if (datos.bloqueId && !(await existe(db, "bloque", datos.bloqueId))) {
+    return { bloqueId: ["El bloque ya no existe."] };
+  }
+  return null;
+}
+
 /** Assigning a property as owner tags the client as «Propietario». */
-async function marcarPropietario(clienteId: string | null) {
+async function marcarPropietario(db: DbOficina, clienteId: string | null) {
   if (!clienteId) return;
-  const { count } = await prisma.cliente.updateMany({
+  const { count } = await db.cliente.updateMany({
     where: { id: clienteId, NOT: { tipos: { has: "PROPIETARIO" } } },
     data: { tipos: { push: "PROPIETARIO" } },
   });
@@ -55,25 +74,21 @@ function revalidarBloque(bloqueId: string | null) {
 }
 
 export async function crearInmueble(data: InmuebleInput) {
-  await requireSession();
+  const ctx = await getContexto();
+  const { db } = ctx;
   const parsed = inmuebleSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
   }
 
-  const existente = await prisma.inmueble.findUnique({
-    where: { referencia: parsed.data.referencia },
-    select: { id: true },
-  });
-  if (existente) {
-    return {
-      success: false as const,
-      error: { referencia: ["Ya existe un inmueble con esta referencia."] },
-    };
-  }
+  const datos = buildData(parsed.data);
+  const error = await comprobarDatos(db, datos);
+  if (error) return { success: false as const, error };
+  const asesor = await resolverAsesor(ctx, parsed.data.asesorId);
+  if (!asesor.ok) return { success: false as const, error: { asesorId: [asesor.error] } };
 
-  const inmueble = await prisma.inmueble.create({ data: buildData(parsed.data) });
-  await marcarPropietario(inmueble.propietarioId);
+  const inmueble = await db.inmueble.create({ data: { ...datos, asesorId: asesor.asesorId } });
+  await marcarPropietario(db, inmueble.propietarioId);
 
   revalidatePath("/inmuebles");
   revalidarBloque(inmueble.bloqueId);
@@ -81,66 +96,63 @@ export async function crearInmueble(data: InmuebleInput) {
 }
 
 export async function actualizarInmueble(id: string, data: InmuebleInput) {
-  await requireSession();
+  const ctx = await getContexto();
+  const { db } = ctx;
   const parsed = inmuebleSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
   }
 
-  const existente = await prisma.inmueble.findFirst({
-    where: { referencia: parsed.data.referencia, NOT: { id } },
-    select: { id: true },
-  });
-  if (existente) {
-    return {
-      success: false as const,
-      error: { referencia: ["Ya existe un inmueble con esta referencia."] },
-    };
-  }
+  const anterior = await db.inmueble.findUnique({ where: { id }, select: { bloqueId: true, asesorId: true } });
+  if (!anterior) return { success: false as const, error: { _: ["Este inmueble ya no existe."] } };
 
-  const anterior = await prisma.inmueble.findUnique({ where: { id }, select: { bloqueId: true } });
-  const actualizado = await prisma.inmueble.update({
-    where: { id },
-    data: buildData(parsed.data),
-  });
-  await marcarPropietario(actualizado.propietarioId);
+  const datos = buildData(parsed.data);
+  const error = await comprobarDatos(db, datos, id);
+  if (error) return { success: false as const, error };
+  const asesor = await resolverAsesor(ctx, parsed.data.asesorId, anterior.asesorId);
+  if (!asesor.ok) return { success: false as const, error: { asesorId: [asesor.error] } };
+
+  const actualizado = await db.inmueble.update({ where: { id }, data: { ...datos, asesorId: asesor.asesorId } });
+  await marcarPropietario(db, actualizado.propietarioId);
 
   revalidatePath("/inmuebles");
   revalidatePath(`/inmuebles/${id}`);
   // Moving a flat between blocks changes both block pages.
-  revalidarBloque(anterior?.bloqueId ?? null);
-  if (actualizado.bloqueId !== anterior?.bloqueId) revalidarBloque(actualizado.bloqueId);
+  revalidarBloque(anterior.bloqueId);
+  if (actualizado.bloqueId !== anterior.bloqueId) revalidarBloque(actualizado.bloqueId);
   return { success: true as const, inmuebleId: id };
 }
 
 export async function eliminarInmueble(id: string) {
-  await requireSession();
+  const { db, esDirector } = await getContexto();
+  if (!esDirector) return SIN_PERMISO;
 
-  const bloqueado = await prisma.inmueble.findFirst({
-    where: { id, operaciones: { some: {} } },
-    select: { id: true },
+  const inmueble = await db.inmueble.findUnique({
+    where: { id },
+    select: { bloqueId: true, _count: { select: { operaciones: true } } },
   });
+  if (!inmueble) return { success: false as const, error: "Este inmueble ya no existe." };
 
-  if (bloqueado) {
+  if (inmueble._count.operaciones) {
     return {
       success: false as const,
       error: "No se puede eliminar: tiene operaciones asociadas.",
     };
   }
 
-  const borrado = await prisma.inmueble.delete({ where: { id } });
+  await db.inmueble.deleteMany({ where: { id } });
   revalidatePath("/inmuebles");
-  revalidarBloque(borrado.bloqueId);
+  revalidarBloque(inmueble.bloqueId);
   return { success: true as const };
 }
 
 export async function buscarInmuebles(query: string) {
-  await requireSession();
+  const { db } = await getContexto();
 
   const q = query.trim();
   if (!q) return [];
 
-  return prisma.inmueble.findMany({
+  return db.inmueble.findMany({
     where: {
       OR: [
         { referencia: { contains: q, mode: "insensitive" } },

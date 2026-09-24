@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Pencil } from "lucide-react";
 
-import { prisma } from "@/lib/prisma";
+import { getContexto } from "@/lib/db";
 import { getUrlFirmadaDocumento } from "@/lib/supabase/storage";
 import { subirArchivoInmueble } from "@/lib/actions/archivos";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import { ListHeading } from "@/components/shared/item-list";
 import { ContactosList } from "@/components/clientes/contactos-list";
 import { ContactoInmuebleForm } from "@/components/inmuebles/contacto-inmueble-form";
 import {
+  FinAlquiler,
   OcupacionBadge,
   PotencialBadge,
   UltimoContacto,
@@ -38,6 +39,7 @@ import {
   formatUbicacion,
 } from "@/lib/validations/inmueble";
 import { formatBloque } from "@/lib/validations/bloque";
+import { AltaPor } from "@/components/shared/alta-por";
 
 const formatoPrecio = new Intl.NumberFormat("es-ES", {
   style: "currency",
@@ -50,18 +52,24 @@ export default async function InmuebleDetallePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const { db, usuario, esDirector } = await getContexto();
   const { id } = await params;
 
-  const inmueble = await prisma.inmueble.findUnique({
+  const inmueble = await db.inmueble.findUnique({
     where: { id },
     include: {
       propietario: true,
       bloque: true,
       contactos: {
         orderBy: { fecha: "desc" },
-        include: { cliente: { select: { id: true, nombre: true, apellidos: true } } },
+        include: {
+          cliente: { select: { id: true, nombre: true, apellidos: true } },
+          creadoPor: { select: { nombre: true } },
+        },
       },
       archivos: { orderBy: { orden: "asc" } },
+      asesor: { select: { nombre: true } },
+      creadoPor: { select: { nombre: true } },
       intereses: { include: { cliente: true }, orderBy: { fecha: "desc" } },
       operaciones: { include: { cliente: true }, orderBy: { fecha: "desc" } },
     },
@@ -78,6 +86,7 @@ export default async function InmuebleDetallePage({
       nombreOriginal: archivo.nombreOriginal,
       tamanioBytes: archivo.tamanioBytes,
       url: await getUrlFirmadaDocumento(archivo.path),
+      puedeEliminar: esDirector || archivo.creadoPorId === usuario.id,
     }))
   );
 
@@ -108,7 +117,7 @@ export default async function InmuebleDetallePage({
         description={`${inmueble.localidad} · ${TIPO_INMUEBLE_LABELS[inmueble.tipoInmueble]} · ${TIPO_OPERACION_LABELS[inmueble.tipoOperacion]}`}
         actions={
           <>
-            <EliminarInmuebleDialog inmuebleId={inmueble.id} referencia={inmueble.referencia} />
+            {esDirector && <EliminarInmuebleDialog inmuebleId={inmueble.id} referencia={inmueble.referencia} />}
             <Button
               variant="outline"
               size="lg"
@@ -221,6 +230,15 @@ export default async function InmuebleDetallePage({
                 <DataItem label="Adquisición potencial">
                   {inmueble.adquisicionPotencial ? <PotencialBadge /> : "No"}
                 </DataItem>
+                {(inmueble.fechaFinAlquiler || inmueble.ocupacion === "INQUILINOS" || inmueble.estado === "ALQUILADO") && (
+                  <DataItem label="Fin del alquiler">
+                    <FinAlquiler fecha={inmueble.fechaFinAlquiler} />
+                  </DataItem>
+                )}
+                <DataItem label="Asesor responsable">{inmueble.asesor?.nombre ?? "—"}</DataItem>
+                <DataItem label="Alta">
+                  <AltaPor nombre={inmueble.creadoPor?.nombre} fecha={inmueble.createdAt} />
+                </DataItem>
                 <DataItem label="Descripción" className="sm:col-span-2 lg:col-span-3">
                   <p className="max-w-[70ch] whitespace-pre-wrap leading-relaxed">
                     {inmueble.descripcion ?? "—"}
@@ -270,6 +288,7 @@ export default async function InmuebleDetallePage({
                   id: f.id,
                   url: f.url!,
                   nombreOriginal: f.nombreOriginal,
+                  puedeEliminar: esDirector || f.creadoPorId === usuario.id,
                 }))}
               />
             </CardContent>

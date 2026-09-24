@@ -23,7 +23,10 @@ import { formatBloque } from "@/lib/validations/bloque";
 import { cn } from "@/lib/utils";
 import type { Inmueble } from "@/lib/generated/prisma/client";
 
-type InmuebleFila = Inmueble & { bloque: { id: string; calle: string; numero: string } | null };
+type InmuebleFila = Inmueble & {
+  bloque: { id: string; calle: string; numero: string } | null;
+  asesor?: { nombre: string } | null;
+};
 
 const formatoPrecio = new Intl.NumberFormat("es-ES", {
   style: "currency",
@@ -71,6 +74,7 @@ export function InmueblesTable({
           <TableHead>Estado</TableHead>
           <TableHead>Ocupación</TableHead>
           <TableHead>Último contacto</TableHead>
+          <TableHead className="hidden xl:table-cell">Asesor</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -127,6 +131,9 @@ export function InmueblesTable({
               </TableCell>
               <TableCell className="text-muted-foreground">
                 <UltimoContacto fecha={inmueble.fechaUltimoContacto} />
+              </TableCell>
+              <TableCell className="hidden text-muted-foreground xl:table-cell">
+                {inmueble.asesor?.nombre ?? "—"}
               </TableCell>
             </TableRow>
           );
