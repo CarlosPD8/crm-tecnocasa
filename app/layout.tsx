@@ -21,8 +21,8 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Tecnocasa | CRM Inmobiliario",
-  description: "CRM interno para gestión de clientes, inmuebles y operaciones.",
+  title: "Picaco | CRM Inmobiliario",
+  description: "Captación de zona para oficinas inmobiliarias: clientes, inmuebles, bloques y agenda.",
 };
 
 export default function RootLayout({

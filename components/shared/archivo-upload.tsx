@@ -4,6 +4,7 @@ import { useId, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { UploadCloud, X } from "lucide-react";
 
+import { comprimirImagen, formatearMB, MAX_BYTES_ARCHIVO } from "@/lib/comprimir-imagen";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -11,7 +12,7 @@ export function ArchivoUpload({
   onUpload,
   label = "Subir",
   accept,
-  hint = "PDF, imágenes u otros documentos",
+  hint = "PDF, imágenes u otros documentos (hasta 4 MB)",
 }: {
   onUpload: (formData: FormData) => Promise<{ success: boolean; error?: string }>;
   label?: string;
@@ -38,6 +39,15 @@ export function ArchivoUpload({
     }
 
     startTransition(async () => {
+      const final = await comprimirImagen(file);
+      if (final.size > MAX_BYTES_ARCHIVO) {
+        toast.error(
+          `El archivo pesa ${formatearMB(final.size)}. El máximo es ${formatearMB(MAX_BYTES_ARCHIVO)}.`
+        );
+        return;
+      }
+      if (final !== file) formData.set("file", final);
+
       const result = await onUpload(formData);
       if (!result.success) {
         toast.error(result.error ?? "No se pudo subir el archivo.");

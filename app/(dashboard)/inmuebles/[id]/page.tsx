@@ -280,7 +280,7 @@ export default async function InmuebleDetallePage({
               <ArchivoUpload
                 label="Subir foto"
                 accept="image/*"
-                hint="JPG, PNG o WebP. Reordénalas con las flechas; la primera es la portada."
+                hint="JPG, PNG o WebP; se reducen solas al subirlas. Reordénalas con las flechas; la primera es la portada."
                 onUpload={subirArchivoInmueble.bind(null, inmueble.id, "FOTO")}
               />
               <FotosGallery

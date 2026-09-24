@@ -11,13 +11,23 @@ import {
   BUCKET_FOTOS,
 } from "@/lib/supabase/storage";
 import type { CategoriaArchivo } from "@/lib/generated/prisma/enums";
+import { MAX_BYTES_ARCHIVO } from "@/lib/comprimir-imagen";
+
+/** Error message for an invalid upload, or null. The browser checks the same before sending. */
+function errorArchivo(file: FormDataEntryValue | null, soloImagen = false) {
+  if (!(file instanceof File) || file.size === 0) return "Selecciona un archivo.";
+  if (file.size > MAX_BYTES_ARCHIVO) return "El archivo pesa más de 4 MB.";
+  if (soloImagen && !file.type.startsWith("image/")) return "Sube una imagen (JPG, PNG o WebP).";
+  return null;
+}
 
 export async function subirArchivoCliente(clienteId: string, formData: FormData) {
   const { db, oficinaId } = await getContexto();
 
   const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    return { success: false as const, error: "Selecciona un archivo." };
+  const errorFile = errorArchivo(file);
+  if (errorFile || !(file instanceof File)) {
+    return { success: false as const, error: errorFile ?? "Selecciona un archivo." };
   }
   if (!(await existe(db, "cliente", clienteId))) {
     return { success: false as const, error: "Este cliente ya no existe." };
@@ -60,8 +70,9 @@ export async function subirArchivoInmueble(
   const { db, oficinaId } = await getContexto();
 
   const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) {
-    return { success: false as const, error: "Selecciona un archivo." };
+  const errorFile = errorArchivo(file, categoria === "FOTO");
+  if (errorFile || !(file instanceof File)) {
+    return { success: false as const, error: errorFile ?? "Selecciona un archivo." };
   }
   if (!(await existe(db, "inmueble", inmuebleId))) {
     return { success: false as const, error: "Este inmueble ya no existe." };

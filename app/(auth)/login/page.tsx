@@ -22,9 +22,9 @@ export default function LoginPage() {
 
         <span className="enter relative flex items-center gap-2.5 text-lg font-semibold tracking-[-0.03em]">
           <span className="grid size-8 place-items-center rounded-[30%] bg-[#f8e7c9] font-display text-xl text-[#064e3b]">
-            t
+            p
           </span>
-          tecnocasa
+          picaco
         </span>
 
         <blockquote className="relative">

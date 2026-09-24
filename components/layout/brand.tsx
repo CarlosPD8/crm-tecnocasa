@@ -10,7 +10,7 @@ export function Brand({ className, size = "md" }: { className?: string; size?: "
           size === "lg" ? "size-10 text-2xl" : "size-7 text-lg"
         )}
       >
-        t
+        p
       </span>
       <span
         className={cn(
@@ -18,7 +18,7 @@ export function Brand({ className, size = "md" }: { className?: string; size?: "
           size === "lg" ? "text-2xl" : "text-[0.95rem]"
         )}
       >
-        tecnocasa
+        picaco
         <span className="ml-1.5 font-normal text-muted-foreground">crm</span>
       </span>
     </span>
