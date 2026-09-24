@@ -1,14 +1,6 @@
-// Whole-row links for tables, without JS click handlers: the row's main link
-// stretches over the row with a pseudo-element, so Ctrl/⌘-click, middle-click
-// and keyboard navigation keep working like any normal link.
+// Whole-row links for tables: the row itself is a <FilaEnlace> (click anywhere
+// opens it) and its main <a> stays a real link for keyboard, Ctrl/⌘-click and
+// middle-click. See components/shared/fila-enlace.tsx.
 
-/** On the <tr>: positioning context + pointer + highlight while the link has keyboard focus. */
-export const FILA_CLICABLE =
-  "relative cursor-pointer has-[[data-row-link]:focus-visible]:bg-accent/60";
-
-/** On the row's main <a> (also add `data-row-link`). */
-export const ENLACE_FILA =
-  "after:absolute after:inset-0 after:content-[''] focus-visible:outline-none";
-
-/** On any other link inside the row, so it stays clickable above the stretched one. */
-export const ENLACE_INTERIOR = "relative z-10";
+/** On the row's main <a> (also add `data-row-link`): the row shows its focus instead. */
+export const ENLACE_FILA = "focus-visible:outline-none";

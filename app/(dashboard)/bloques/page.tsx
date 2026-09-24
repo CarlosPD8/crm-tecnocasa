@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Building, Plus, SearchX } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ENLACE_FILA, FILA_CLICABLE } from "@/components/shared/row-link";
+import { ENLACE_FILA } from "@/components/shared/row-link";
+import { FilaEnlace } from "@/components/shared/fila-enlace";
 
 import { getContexto } from "@/lib/db";
 import { resumenPorBloque } from "@/lib/bloques";
@@ -110,7 +111,7 @@ export default async function BloquesPage({
               {bloques.map((bloque) => {
                 const r = resumen.get(bloque.id)!;
                 return (
-                  <TableRow key={bloque.id} className={FILA_CLICABLE}>
+                  <FilaEnlace key={bloque.id} href={`/bloques/${bloque.id}`}>
                     <TableCell>
                       <Link
                         href={`/bloques/${bloque.id}`}
@@ -143,7 +144,7 @@ export default async function BloquesPage({
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                  </TableRow>
+                  </FilaEnlace>
                 );
               })}
             </TableBody>

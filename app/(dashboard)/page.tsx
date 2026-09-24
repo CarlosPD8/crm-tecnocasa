@@ -193,7 +193,7 @@ export default async function DashboardPage() {
       {/* Stat band — the actionable number gets the weight, the rest read as context. */}
       <section
         aria-label="Resumen"
-        className="rise grid overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/6 [animation-delay:60ms] sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]"
+        className="rise grid grid-cols-1 overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/6 [animation-delay:60ms] sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]"
       >
         <Link
           href={
@@ -228,8 +228,8 @@ export default async function DashboardPage() {
         <Stat label="Operaciones" value={operacionesMes} hint="cerradas en 30 días" />
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-12">
-        <div className="flex flex-col gap-6 lg:col-span-7">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <div className="flex min-w-0 flex-col gap-6 lg:col-span-7">
           <Panel
             title="Por contactar"
             action={
@@ -292,7 +292,7 @@ export default async function DashboardPage() {
           </Panel>
         </div>
 
-        <div className="flex flex-col gap-6 lg:col-span-5">
+        <div className="flex min-w-0 flex-col gap-6 lg:col-span-5">
           <Panel title="Próximos contactos">
             {proximos.length === 0 ? (
               <PanelEmpty icon={CalendarCheck} text="No hay contactos programados." />
@@ -350,7 +350,7 @@ export default async function DashboardPage() {
                     <span className="block truncate font-medium">{inmueble.direccion}</span>
                     <span className="block truncate text-xs text-muted-foreground">{inmueble.localidad}</span>
                   </span>
-                  <FinAlquiler fecha={inmueble.fechaFinAlquiler} className="shrink-0 justify-end text-xs" />
+                  <FinAlquiler fecha={inmueble.fechaFinAlquiler} className="shrink-0 flex-col items-end gap-1 text-xs sm:flex-row sm:items-center sm:gap-2" />
                 </Row>
               ))
             )}
@@ -441,7 +441,7 @@ function Panel({
               <Link
                 key={a.href}
                 href={a.href}
-                className="group flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-primary"
+                className="group flex items-center gap-1 whitespace-nowrap text-xs font-medium text-muted-foreground transition-colors hover:text-primary"
               >
                 {a.label}
                 <ArrowUpRight className="size-3.5 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />

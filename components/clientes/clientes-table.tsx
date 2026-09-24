@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
-import { ENLACE_FILA, FILA_CLICABLE } from "@/components/shared/row-link";
+import { ENLACE_FILA } from "@/components/shared/row-link";
+import { FilaEnlace } from "@/components/shared/fila-enlace";
 import { EtiquetasCliente } from "@/components/clientes/etiquetas-cliente";
 import { cn } from "@/lib/utils";
 import type { Cliente } from "@/lib/generated/prisma/client";
@@ -65,7 +66,7 @@ export function ClientesTable({
           const proximo = cliente.fechaProximoContacto;
           const vencido = proximo && (isToday(proximo) || isPast(proximo));
           return (
-            <TableRow key={cliente.id} className={FILA_CLICABLE}>
+            <FilaEnlace key={cliente.id} href={`/clientes/${cliente.id}`}>
               <TableCell>
                 <Link
                   href={`/clientes/${cliente.id}`}
@@ -106,7 +107,7 @@ export function ClientesTable({
                   <span className="text-muted-foreground">—</span>
                 )}
               </TableCell>
-            </TableRow>
+            </FilaEnlace>
           );
         })}
       </TableBody>

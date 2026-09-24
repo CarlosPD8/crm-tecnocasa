@@ -26,7 +26,8 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { EstadoBadge } from "@/components/inmuebles/estado-badge";
 import { OcupacionBadge, PotencialBadge, UltimoContacto } from "@/components/inmuebles/situacion";
 import { EliminarBloqueDialog } from "@/components/bloques/eliminar-bloque-dialog";
-import { ENLACE_FILA, ENLACE_INTERIOR, FILA_CLICABLE } from "@/components/shared/row-link";
+import { ENLACE_FILA } from "@/components/shared/row-link";
+import { FilaEnlace } from "@/components/shared/fila-enlace";
 import { cn } from "@/lib/utils";
 
 const formatoPrecio = new Intl.NumberFormat("es-ES", {
@@ -143,7 +144,7 @@ export default async function BloqueDetallePage({ params }: { params: Promise<{ 
           </TableHeader>
           <TableBody>
             {bloque.inmuebles.map((piso) => (
-              <TableRow key={piso.id} className={FILA_CLICABLE}>
+              <FilaEnlace key={piso.id} href={`/inmuebles/${piso.id}`}>
                 <TableCell>
                   <Link
                     href={`/inmuebles/${piso.id}`}
@@ -174,7 +175,7 @@ export default async function BloqueDetallePage({ params }: { params: Promise<{ 
                   {piso.propietario ? (
                     <Link
                       href={`/clientes/${piso.propietario.id}`}
-                      className={cn(ENLACE_INTERIOR, "hover:text-primary hover:underline underline-offset-4")}
+                      className={cn("hover:text-primary hover:underline underline-offset-4")}
                     >
                       {piso.propietario.nombre} {piso.propietario.apellidos}
                     </Link>
@@ -185,7 +186,7 @@ export default async function BloqueDetallePage({ params }: { params: Promise<{ 
                 <TableCell className="text-muted-foreground">
                   <UltimoContacto fecha={piso.fechaUltimoContacto} />
                 </TableCell>
-              </TableRow>
+              </FilaEnlace>
             ))}
           </TableBody>
         </Table>

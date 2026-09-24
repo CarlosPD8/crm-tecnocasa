@@ -11,7 +11,8 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
-import { ENLACE_FILA, ENLACE_INTERIOR, FILA_CLICABLE } from "@/components/shared/row-link";
+import { ENLACE_FILA } from "@/components/shared/row-link";
+import { FilaEnlace } from "@/components/shared/fila-enlace";
 import { EstadoBadge } from "@/components/inmuebles/estado-badge";
 import { OcupacionBadge, PotencialBadge, UltimoContacto } from "@/components/inmuebles/situacion";
 import {
@@ -81,7 +82,7 @@ export function InmueblesTable({
         {inmuebles.map((inmueble) => {
           const ubicacion = formatUbicacion(inmueble);
           return (
-            <TableRow key={inmueble.id} className={FILA_CLICABLE}>
+            <FilaEnlace key={inmueble.id} href={`/inmuebles/${inmueble.id}`}>
               <TableCell>
                 <span className="flex items-center gap-1.5">
                   <Link
@@ -106,7 +107,7 @@ export function InmueblesTable({
                       {" · "}
                       <Link
                         href={`/bloques/${inmueble.bloque.id}`}
-                        className={cn(ENLACE_INTERIOR, "underline-offset-4 hover:text-primary hover:underline")}
+                        className={cn("underline-offset-4 hover:text-primary hover:underline")}
                       >
                         Bloque {formatBloque(inmueble.bloque)}
                       </Link>
@@ -135,7 +136,7 @@ export function InmueblesTable({
               <TableCell className="hidden text-muted-foreground xl:table-cell">
                 {inmueble.asesor?.nombre ?? "—"}
               </TableCell>
-            </TableRow>
+            </FilaEnlace>
           );
         })}
       </TableBody>
