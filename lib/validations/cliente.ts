@@ -2,8 +2,7 @@ import { z } from "zod";
 
 /**
  * Client tags; a client can carry several. «Vendedor» is gone: an owner whose
- * property is for sale is the seller. The legacy "VENDEDOR" enum value stays in
- * the database until the contract migration and is never offered.
+ * property is for sale is the seller.
  */
 export const TIPO_CLIENTE_LABELS = {
   COMPRADOR: "Comprador",
