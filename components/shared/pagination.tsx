@@ -37,6 +37,8 @@ export function Pagination({
       <PaginationContent>
         <PaginationItem>
           <PaginationPrevious
+            text="Anterior"
+            aria-label="Página anterior"
             href={buildHref(basePath, params, Math.max(1, page - 1))}
             aria-disabled={page <= 1}
             className={page <= 1 ? "pointer-events-none opacity-50" : undefined}
@@ -51,6 +53,8 @@ export function Pagination({
 
         <PaginationItem>
           <PaginationNext
+            text="Siguiente"
+            aria-label="Página siguiente"
             href={buildHref(basePath, params, Math.min(totalPages, page + 1))}
             aria-disabled={page >= totalPages}
             className={

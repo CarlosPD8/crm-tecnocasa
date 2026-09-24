@@ -16,15 +16,19 @@ type Persona = { id: string; label: string };
 export function ContactoInmuebleForm({
   inmuebleId,
   propietario,
+  proximoActual,
 }: {
   inmuebleId: string;
   propietario: Persona | null;
+  /** The property's stored follow-up (yyyy-MM-dd) or null. */
+  proximoActual: string | null;
 }) {
   const [persona, setPersona] = useState<Persona | null>(propietario);
 
   return (
     <ContactoForm
-      registrar={({ nota }) => crearContactoInmueble(inmuebleId, { nota, clienteId: persona?.id ?? "" })}
+      proximoActual={proximoActual}
+      registrar={(data) => crearContactoInmueble(inmuebleId, { ...data, clienteId: persona?.id ?? "" })}
     >
       <Field
         label="Persona contactada"

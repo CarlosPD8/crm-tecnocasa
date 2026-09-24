@@ -27,6 +27,7 @@ import { TabCount } from "@/components/shared/tab-count";
 import { ListHeading } from "@/components/shared/item-list";
 import { ContactosList } from "@/components/clientes/contactos-list";
 import { ContactoInmuebleForm } from "@/components/inmuebles/contacto-inmueble-form";
+import { ProximoContacto } from "@/components/shared/proximo-contacto";
 import {
   FinAlquiler,
   OcupacionBadge,
@@ -235,6 +236,9 @@ export default async function InmuebleDetallePage({
                     <FinAlquiler fecha={inmueble.fechaFinAlquiler} />
                   </DataItem>
                 )}
+                <DataItem label="Próximo contacto">
+                  <ProximoContacto fecha={inmueble.fechaProximoContacto} />
+                </DataItem>
                 <DataItem label="Asesor responsable">{inmueble.asesor?.nombre ?? "—"}</DataItem>
                 <DataItem label="Alta">
                   <AltaPor nombre={inmueble.creadoPor?.nombre} fecha={inmueble.createdAt} />
@@ -264,6 +268,7 @@ export default async function InmuebleDetallePage({
                         }
                       : null
                   }
+                  proximoActual={inmueble.fechaProximoContacto?.toISOString().slice(0, 10) ?? null}
                 />
               </div>
               <div className="flex flex-col gap-4">

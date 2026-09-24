@@ -72,6 +72,13 @@ export const FILTROS_INMUEBLES = {
       presets: ["pasados", "proximos30", "proximos90", "sin"],
     },
     {
+      clave: "proximo",
+      etiqueta: "Próximo contacto",
+      grupo: "Seguimiento",
+      tipo: "fecha",
+      presets: ["vencido", "hoy", "proximos7", "proximos30", "sin"],
+    },
+    {
       clave: "ultimo",
       etiqueta: "Último contacto",
       grupo: "Seguimiento",
@@ -90,6 +97,7 @@ export const FILTROS_INMUEBLES = {
     precioDesc: "Precio más alto",
     metros: "Más superficie",
     referencia: "Referencia",
+    proximo: "Próximo contacto más cercano",
     ultimo: "Más tiempo sin contacto",
     ubicacion: "Bloque, escalera y planta",
     finAlquiler: "Fin de alquiler más cercano",

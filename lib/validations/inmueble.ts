@@ -42,6 +42,11 @@ export const inmuebleSchema = z.object({
     .optional()
     .or(z.literal(""))
     .refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), "Fecha no válida"),
+  fechaProximoContacto: z
+    .string()
+    .optional()
+    .or(z.literal(""))
+    .refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), "Fecha no válida"),
   // Only directors send it; "" = no advisor. Ignored for advisors (see resolverAsesor).
   asesorId: z.string().optional(),
 });

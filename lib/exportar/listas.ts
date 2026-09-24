@@ -107,6 +107,7 @@ export async function exportar(request: NextRequest, entidad: Entidad) {
         texto("Ocupación", (i) => ocupacionLabel(i.ocupacion), 12),
         texto("Adquisición potencial", (i) => (i.adquisicionPotencial ? "Sí" : "No"), 10),
         fecha("Fin del alquiler", (i) => i.fechaFinAlquiler),
+        fecha("Próximo contacto", (i) => i.fechaProximoContacto),
         texto("Propietario", (i) => (i.propietario ? `${i.propietario.nombre} ${i.propietario.apellidos}` : null), 24),
         texto("Teléfono propietario", (i) => i.propietario?.telefono, 14),
         texto("Asesor", (i) => i.asesor?.nombre),

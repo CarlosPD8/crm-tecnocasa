@@ -19,6 +19,7 @@ import { ListHeading } from "@/components/shared/item-list";
 import { TabCount } from "@/components/shared/tab-count";
 import { ContactosList } from "@/components/clientes/contactos-list";
 import { ContactoForm } from "@/components/clientes/contacto-form";
+import { ProximoContacto } from "@/components/shared/proximo-contacto";
 import { crearContacto } from "@/lib/actions/contactos";
 import { EliminarClienteDialog } from "@/components/clientes/eliminar-cliente-dialog";
 import { ArchivosList } from "@/components/shared/archivos-list";
@@ -141,11 +142,7 @@ export default async function ClienteDetallePage({
                   </span>
                 </DataItem>
                 <DataItem label="Próximo contacto">
-                  <span className="tabular">
-                    {cliente.fechaProximoContacto
-                      ? format(cliente.fechaProximoContacto, "dd/MM/yyyy")
-                      : "—"}
-                  </span>
+                  <ProximoContacto fecha={cliente.fechaProximoContacto} />
                 </DataItem>
                 <DataItem label="Asesor responsable">{cliente.asesor?.nombre ?? "—"}</DataItem>
                 <DataItem label="Alta">
@@ -186,7 +183,10 @@ export default async function ClienteDetallePage({
             <CardContent className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
               <div className="flex flex-col gap-3 lg:self-start">
                 <ListHeading title="Registrar contacto" />
-                <ContactoForm registrar={crearContacto.bind(null, cliente.id)} />
+                <ContactoForm
+                  registrar={crearContacto.bind(null, cliente.id)}
+                  proximoActual={cliente.fechaProximoContacto?.toISOString().slice(0, 10) ?? null}
+                />
               </div>
               <div className="flex flex-col gap-4">
                 <ListHeading title="Historial" count={cliente.contactos.length} />

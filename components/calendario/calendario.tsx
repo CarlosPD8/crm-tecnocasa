@@ -143,7 +143,11 @@ export default function Calendario() {
           toast.info("Un próximo contacto es para todo el día: suéltalo en la fila «Todo el día» o en la vista Mes.");
           return;
         }
-        const r = await moverProximoContacto(item.id, format(inicio, "yyyy-MM-dd"));
+        const r = await moverProximoContacto(
+          item.id,
+          format(inicio, "yyyy-MM-dd"),
+          item.cliente ? "cliente" : "inmueble"
+        );
         if (!r.success) throw new Error(r.error);
         toast.success(`Próximo contacto movido al ${cuando}.`);
         return;

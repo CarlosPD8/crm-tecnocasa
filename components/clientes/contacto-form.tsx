@@ -1,23 +1,36 @@
 "use client";
 
-import { useRef, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
+import { format, parseISO } from "date-fns";
+import { es } from "date-fns/locale";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { ProximoContactoPicker } from "@/components/shared/proximo-contacto";
+import { hoyISO } from "@/lib/filtros/tipos";
 
 /**
  * Note composer shared by client and property histories. The caller decides
  * where the note goes via `registrar`; `children` renders extra fields
  * (e.g. «Persona contactada») above the note, so they are set before submitting.
+ * The next follow-up is chosen in the same step and replaces the stored one.
  */
 export function ContactoForm({
   registrar,
+  proximoActual,
   children,
 }: {
-  registrar: (data: { nota: string }) => Promise<{ success: boolean }>;
+  registrar: (data: { nota: string; fechaProximoContacto: string }) => Promise<{ success: boolean }>;
+  /** Stored follow-up (yyyy-MM-dd) or null. */
+  proximoActual: string | null;
   children?: React.ReactNode;
 }) {
   const [isPending, startTransition] = useTransition();
+  // A follow-up that is due today or overdue is the call being logged now, so
+  // it does not carry over; a future one stays unless it is changed.
+  const [fechaProximo, setFechaProximo] = useState(() =>
+    proximoActual && proximoActual > hoyISO() ? proximoActual : ""
+  );
   const formRef = useRef<HTMLFormElement>(null);
 
   function handleSubmit(formData: FormData) {
@@ -28,12 +41,16 @@ export function ContactoForm({
     }
 
     startTransition(async () => {
-      const result = await registrar({ nota });
+      const result = await registrar({ nota, fechaProximoContacto: fechaProximo });
       if (!result.success) {
         toast.error("No se pudo registrar el contacto.");
         return;
       }
-      toast.success("Contacto registrado.");
+      toast.success(
+        fechaProximo
+          ? `Contacto registrado. Próximo: ${format(parseISO(fechaProximo), "EEEE d 'de' MMMM", { locale: es })}.`
+          : "Contacto registrado."
+      );
       formRef.current?.reset();
     });
   }
@@ -63,6 +80,9 @@ export function ContactoForm({
           }}
           className="field-sizing-content block min-h-20 w-full resize-none bg-transparent px-4 pt-3 pb-2 text-sm leading-relaxed outline-none placeholder:text-muted-foreground"
         />
+        <div className="border-t border-border/60 px-4 py-3">
+          <ProximoContactoPicker value={fechaProximo} onChange={setFechaProximo} actual={proximoActual} />
+        </div>
         <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-surface/50 px-3 py-2">
           <span className="hidden text-xs text-muted-foreground sm:inline">
             <kbd className="rounded border border-border bg-card px-1 font-sans text-[0.7rem]">Ctrl</kbd>{" "}

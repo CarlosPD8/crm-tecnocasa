@@ -64,8 +64,12 @@ function Detalle({ item, onClose }: { item: ItemCalendario; onClose: () => void 
 
       <DialogFooter className="gap-2">
         {item.inmueble && (
-          <Button variant="outline" nativeButton={false} render={<Link href={`/inmuebles/${item.inmueble.id}`} onClick={onClose} />}>
-            {item.inmueble.referencia} <ArrowUpRight />
+          <Button
+            variant={item.fuente === "proximo" && !item.cliente ? "default" : "outline"}
+            nativeButton={false}
+            render={<Link href={`/inmuebles/${item.inmueble.id}`} onClick={onClose} />}
+          >
+            {item.fuente === "proximo" && !item.cliente ? "Abrir ficha y registrar" : item.inmueble.referencia} <ArrowUpRight />
           </Button>
         )}
         {item.cliente && (

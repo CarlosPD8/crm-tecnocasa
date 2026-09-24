@@ -5,6 +5,7 @@ import { existe, getContexto } from "@/lib/db";
 import {
   contactoInmuebleSchema,
   contactoSchema,
+  proximoContactoData,
   type ContactoInmuebleInput,
   type ContactoInput,
 } from "@/lib/validations/contacto";
@@ -27,18 +28,20 @@ export async function crearContacto(clienteId: string, data: ContactoInput) {
     }),
     db.cliente.update({
       where: { id: clienteId },
-      data: { fechaUltimoContacto: ahora },
+      data: { fechaUltimoContacto: ahora, ...proximoContactoData(parsed.data.fechaProximoContacto) },
     }),
   ]);
 
   revalidatePath(`/clientes/${clienteId}`);
+  revalidatePath("/clientes");
+  revalidatePath("/");
   return { success: true as const };
 }
 
 /**
  * Logs a contact about a property. If a person is given (the owner by default),
  * the same record also lands in that client's history and both "last contact"
- * dates move together.
+ * dates move together. The next follow-up belongs to the property.
  */
 export async function crearContactoInmueble(inmuebleId: string, data: ContactoInmuebleInput) {
   const { db } = await getContexto();
@@ -65,13 +68,14 @@ export async function crearContactoInmueble(inmuebleId: string, data: ContactoIn
     }
     return tx.inmueble.update({
       where: { id: inmuebleId },
-      data: { fechaUltimoContacto: ahora },
+      data: { fechaUltimoContacto: ahora, ...proximoContactoData(parsed.data.fechaProximoContacto) },
       select: { bloqueId: true },
     });
   });
 
   revalidatePath(`/inmuebles/${inmuebleId}`);
   revalidatePath("/inmuebles");
+  revalidatePath("/");
   if (clienteId) revalidatePath(`/clientes/${clienteId}`);
   if (inmueble.bloqueId) revalidatePath(`/bloques/${inmueble.bloqueId}`);
   return { success: true as const };

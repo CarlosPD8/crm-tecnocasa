@@ -29,6 +29,68 @@ function iniciales(nombre: string, apellidos: string) {
   return `${nombre[0] ?? ""}${apellidos[0] ?? ""}`.toUpperCase();
 }
 
+/** A client or a property with a follow-up date, as the panels list them. */
+type Seguimiento = {
+  clave: string;
+  href: string;
+  fecha: Date;
+  titulo: string;
+  detalle: string;
+  /** Initials for clients, reference for properties. */
+  marca: { tipo: "iniciales" | "referencia"; texto: string };
+};
+
+type ClienteSeguimiento = {
+  id: string;
+  nombre: string;
+  apellidos: string;
+  telefono: string | null;
+  email: string | null;
+  fechaProximoContacto: Date | null;
+};
+
+type InmuebleSeguimiento = {
+  id: string;
+  referencia: string;
+  direccion: string;
+  localidad: string;
+  fechaProximoContacto: Date | null;
+  propietario: { nombre: string; apellidos: string; telefono: string | null } | null;
+};
+
+function seguimientos(clientes: ClienteSeguimiento[], inmuebles: InmuebleSeguimiento[], limite: number) {
+  const lista: Seguimiento[] = [
+    ...clientes.map((c) => ({
+      clave: `c-${c.id}`,
+      href: `/clientes/${c.id}`,
+      fecha: c.fechaProximoContacto!,
+      titulo: `${c.nombre} ${c.apellidos}`,
+      detalle: c.telefono ?? c.email ?? "Sin datos de contacto",
+      marca: { tipo: "iniciales" as const, texto: iniciales(c.nombre, c.apellidos) },
+    })),
+    ...inmuebles.map((i) => ({
+      clave: `i-${i.id}`,
+      href: `/inmuebles/${i.id}`,
+      fecha: i.fechaProximoContacto!,
+      titulo: i.direccion,
+      detalle: i.propietario
+        ? [`${i.propietario.nombre} ${i.propietario.apellidos}`, i.propietario.telefono].filter(Boolean).join(" · ")
+        : i.localidad,
+      marca: { tipo: "referencia" as const, texto: i.referencia },
+    })),
+  ];
+  return lista.sort((a, b) => a.fecha.getTime() - b.fecha.getTime()).slice(0, limite);
+}
+
+const selectInmuebleSeguimiento = {
+  id: true,
+  referencia: true,
+  direccion: true,
+  localidad: true,
+  fechaProximoContacto: true,
+  propietario: { select: { nombre: true, apellidos: true, telefono: true } },
+} as const;
+
 export default async function DashboardPage() {
   const { db } = await getContexto();
   const ahora = new Date();
@@ -40,10 +102,13 @@ export default async function DashboardPage() {
   const [
     totalClientes,
     totalInmueblesDisponibles,
-    pendientesTotal,
+    pendientesClientes,
+    pendientesInmuebles,
     operacionesMes,
-    pendientes,
-    proximos,
+    clientesPendientes,
+    inmueblesPendientes,
+    clientesProximos,
+    inmueblesProximos,
     inmueblesDisponibles,
     operacionesRecientes,
     finesAlquiler,
@@ -52,16 +117,29 @@ export default async function DashboardPage() {
     db.cliente.count(),
     db.inmueble.count({ where: { estado: "DISPONIBLE" } }),
     db.cliente.count({ where: { fechaProximoContacto: { lte: finDeHoy } } }),
+    db.inmueble.count({ where: { fechaProximoContacto: { lte: finDeHoy } } }),
     db.operacion.count({ where: { fecha: { gte: subDays(ahora, 30) } } }),
     db.cliente.findMany({
       where: { fechaProximoContacto: { lte: finDeHoy } },
       orderBy: { fechaProximoContacto: "asc" },
       take: 6,
     }),
+    db.inmueble.findMany({
+      where: { fechaProximoContacto: { lte: finDeHoy } },
+      orderBy: { fechaProximoContacto: "asc" },
+      take: 6,
+      select: selectInmuebleSeguimiento,
+    }),
     db.cliente.findMany({
       where: { fechaProximoContacto: { gt: finDeHoy } },
       orderBy: { fechaProximoContacto: "asc" },
       take: 6,
+    }),
+    db.inmueble.findMany({
+      where: { fechaProximoContacto: { gt: finDeHoy } },
+      orderBy: { fechaProximoContacto: "asc" },
+      take: 6,
+      select: selectInmuebleSeguimiento,
     }),
     db.inmueble.findMany({
       where: { estado: "DISPONIBLE" },
@@ -83,6 +161,17 @@ export default async function DashboardPage() {
   ]);
 
   const fechaLarga = format(ahora, "EEEE, d 'de' MMMM", { locale: es });
+  const pendientesTotal = pendientesClientes + pendientesInmuebles;
+  const pendientes = seguimientos(clientesPendientes, inmueblesPendientes, 6);
+  const proximos = seguimientos(clientesProximos, inmueblesProximos, 6);
+  const verPendientes = [
+    ...(pendientesClientes > 0
+      ? [{ href: "/clientes?proximo=p:vencido&orden=proximo", label: `Clientes (${pendientesClientes})` }]
+      : []),
+    ...(pendientesInmuebles > 0
+      ? [{ href: "/inmuebles?proximo=p:vencido&orden=proximo", label: `Inmuebles (${pendientesInmuebles})` }]
+      : []),
+  ];
 
   return (
     <div className="flex flex-col gap-10">
@@ -107,7 +196,11 @@ export default async function DashboardPage() {
         className="rise grid overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/6 [animation-delay:60ms] sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr]"
       >
         <Link
-          href="/clientes?proximo=p:vencido&orden=proximo"
+          href={
+            pendientesInmuebles > 0 && pendientesClientes === 0
+              ? "/inmuebles?proximo=p:vencido&orden=proximo"
+              : "/clientes?proximo=p:vencido&orden=proximo"
+          }
           className="group relative flex flex-col justify-between gap-6 bg-primary p-6 text-primary-foreground transition-colors duration-300 hover:bg-[color-mix(in_oklch,var(--primary),black_8%)] dark:bg-accent dark:text-accent-foreground dark:hover:bg-[color-mix(in_oklch,var(--accent),white_5%)] sm:col-span-2 lg:col-span-1"
         >
           <span className="flex items-center justify-between text-sm font-medium opacity-90">
@@ -119,7 +212,9 @@ export default async function DashboardPage() {
           <span className="flex items-end justify-between gap-4">
             <span className="font-display tabular text-7xl leading-none">{pendientesTotal}</span>
             <span className="max-w-[18ch] text-right text-xs opacity-80">
-              clientes con contacto vencido o programado para hoy
+              {pendientesInmuebles > 0
+                ? "clientes e inmuebles con contacto vencido o para hoy"
+                : "clientes con contacto vencido o programado para hoy"}
             </span>
           </span>
         </Link>
@@ -138,26 +233,20 @@ export default async function DashboardPage() {
           <Panel
             title="Por contactar"
             action={
-              pendientesTotal > pendientes.length
-                ? { href: "/clientes?proximo=p:vencido&orden=proximo", label: `Ver los ${pendientesTotal}` }
-                : undefined
+              pendientesTotal > pendientes.length || pendientesInmuebles > 0 ? verPendientes : undefined
             }
           >
             {pendientes.length === 0 ? (
               <PanelEmpty icon={CalendarCheck} text="Nadie esperando llamada. La agenda de hoy está limpia." />
             ) : (
-              pendientes.map((cliente) => {
-                const r = retraso(cliente.fechaProximoContacto!);
+              pendientes.map((s) => {
+                const r = retraso(s.fecha);
                 return (
-                  <Row key={cliente.id} href={`/clientes/${cliente.id}`}>
-                    <Avatar text={iniciales(cliente.nombre, cliente.apellidos)} />
+                  <Row key={s.clave} href={s.href}>
+                    <Marca marca={s.marca} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium">
-                        {cliente.nombre} {cliente.apellidos}
-                      </span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {cliente.telefono ?? cliente.email ?? "Sin datos de contacto"}
-                      </span>
+                      <span className="block truncate font-medium">{s.titulo}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{s.detalle}</span>
                     </span>
                     <span
                       className={cn(
@@ -210,12 +299,12 @@ export default async function DashboardPage() {
             ) : (
               <ol className="relative px-5 py-3">
                 <span aria-hidden className="absolute top-6 bottom-6 left-[2.35rem] w-px bg-border" />
-                {proximos.map((cliente) => {
-                  const fecha = cliente.fechaProximoContacto!;
+                {proximos.map((s) => {
+                  const fecha = s.fecha;
                   return (
-                    <li key={cliente.id}>
+                    <li key={s.clave}>
                       <Link
-                        href={`/clientes/${cliente.id}`}
+                        href={s.href}
                         className="group relative flex items-center gap-4 rounded-lg py-2 text-sm"
                       >
                         <span className="relative z-10 flex w-9 shrink-0 flex-col items-center rounded-md bg-card py-0.5 leading-none ring-1 ring-border">
@@ -225,7 +314,12 @@ export default async function DashboardPage() {
                           </span>
                         </span>
                         <span className="min-w-0 flex-1 truncate font-medium transition-colors group-hover:text-primary">
-                          {cliente.nombre} {cliente.apellidos}
+                          {s.marca.tipo === "referencia" && (
+                            <span className="mr-1.5 font-mono text-xs font-normal text-muted-foreground">
+                              {s.marca.texto}
+                            </span>
+                          )}
+                          {s.titulo}
                         </span>
                         <span className="shrink-0 text-xs text-muted-foreground capitalize">
                           {format(fecha, "EEEE", { locale: es })}
@@ -333,21 +427,27 @@ function Panel({
   children,
 }: {
   title: string;
-  action?: { href: string; label: string };
+  action?: PanelAction | PanelAction[];
   children: React.ReactNode;
 }) {
+  const acciones = action ? [action].flat() : [];
   return (
     <section className="rise overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/6 [animation-delay:120ms]">
-      <header className="flex items-center justify-between border-b border-border/70 px-5 py-3.5">
+      <header className="flex items-center justify-between gap-3 border-b border-border/70 px-5 py-3.5">
         <h2 className="text-sm font-semibold tracking-[-0.01em]">{title}</h2>
-        {action && (
-          <Link
-            href={action.href}
-            className="group flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-primary"
-          >
-            {action.label}
-            <ArrowUpRight className="size-3.5 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
-          </Link>
+        {acciones.length > 0 && (
+          <span className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
+            {acciones.map((a) => (
+              <Link
+                key={a.href}
+                href={a.href}
+                className="group flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-primary"
+              >
+                {a.label}
+                <ArrowUpRight className="size-3.5 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              </Link>
+            ))}
+          </span>
         )}
       </header>
       <div className="flex flex-col divide-y divide-border/60">{children}</div>
@@ -366,10 +466,15 @@ function Row({ href, children }: { href: string; children: React.ReactNode }) {
   );
 }
 
-function Avatar({ text }: { text: string }) {
+type PanelAction = { href: string; label: string };
+
+function Marca({ marca }: { marca: Seguimiento["marca"] }) {
+  if (marca.tipo === "referencia") {
+    return <span className="w-20 shrink-0 font-mono text-xs text-muted-foreground">{marca.texto}</span>;
+  }
   return (
     <span className="grid size-8 shrink-0 place-items-center rounded-[30%] bg-secondary text-xs font-semibold text-secondary-foreground">
-      {text}
+      {marca.texto}
     </span>
   );
 }

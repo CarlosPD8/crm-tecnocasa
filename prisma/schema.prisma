@@ -262,6 +262,8 @@ model Inmueble {
   ocupacion            Ocupacion?
   adquisicionPotencial Boolean    @default(false)
   fechaUltimoContacto  DateTime?
+  // Día en que toca volver a contactar (UTC medianoche), como en Cliente.
+  fechaProximoContacto DateTime?
   // Fin del contrato de alquiler vigente (solo fecha).
   fechaFinAlquiler     DateTime?  @db.Date
 
@@ -280,6 +282,7 @@ model Inmueble {
   @@index([oficinaId, createdAt])
   @@index([oficinaId, asesorId])
   @@index([oficinaId, fechaFinAlquiler])
+  @@index([oficinaId, fechaProximoContacto])
   @@index([bloqueId])
   @@index([bloqueId, escalera, planta, puerta])
   @@index([ocupacion])

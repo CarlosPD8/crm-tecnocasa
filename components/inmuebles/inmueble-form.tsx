@@ -99,6 +99,7 @@ export function InmuebleForm({
           ocupacion: inmueble.ocupacion ?? "SIN_DATOS",
           adquisicionPotencial: inmueble.adquisicionPotencial,
           fechaFinAlquiler: inmueble.fechaFinAlquiler?.toISOString().slice(0, 10) ?? "",
+          fechaProximoContacto: inmueble.fechaProximoContacto?.toISOString().slice(0, 10) ?? "",
           ...(asesores ? { asesorId: inmueble.asesorId ?? "" } : {}),
         }
       : {
@@ -369,8 +370,8 @@ export function InmuebleForm({
       </FormSection>
 
       <FormSection
-        title={asesores ? "Propietario y asesor" : "Propietario"}
-        description="Cliente de la cartera que ha encargado la venta o el alquiler."
+        title="Propietario y seguimiento"
+        description="Quién es el dueño, cuándo volver a contactar y quién lleva el inmueble."
       >
         <Field label="Cliente propietario" optional className="sm:col-span-2">
           <ClientePicker
@@ -378,6 +379,20 @@ export function InmuebleForm({
             valueLabel={propietario?.label}
             onChange={setPropietario}
             placeholder="Buscar en clientes…"
+          />
+        </Field>
+        <Field
+          label="Próximo contacto"
+          htmlFor="fechaProximoContacto"
+          optional
+          error={errors.fechaProximoContacto?.message}
+          hint="Ese día el inmueble aparecerá en «Por contactar» del panel."
+        >
+          <Input
+            id="fechaProximoContacto"
+            type="date"
+            aria-invalid={!!errors.fechaProximoContacto}
+            {...register("fechaProximoContacto")}
           />
         </Field>
         {asesores && (

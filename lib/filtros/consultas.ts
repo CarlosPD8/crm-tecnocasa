@@ -161,6 +161,7 @@ export function consultaInmuebles(sp: SP) {
     ...booleano(sp.fotos, { archivos: { some: { categoria: "FOTO" as const } } }, { archivos: { none: { categoria: "FOTO" as const } } }),
     ...booleano(sp.operaciones, { operaciones: { some: {} } }, { operaciones: { none: {} } }),
     ...fecha(sp.finAlquiler, (c) => ({ fechaFinAlquiler: c })),
+    ...fecha(sp.proximo, (c) => ({ fechaProximoContacto: c })),
     ...fecha(sp.ultimo, (c) => ({ fechaUltimoContacto: c })),
     ...fecha(sp.alta, (c) => ({ createdAt: c ?? undefined })),
   );
@@ -186,6 +187,7 @@ export function consultaInmuebles(sp: SP) {
     precioDesc: [{ precio: "desc" as const }],
     metros: [{ metrosCuadrados: { sort: "desc" as const, nulls: "last" as const } }],
     referencia: [{ referencia: "asc" as const }],
+    proximo: [{ fechaProximoContacto: { sort: "asc" as const, nulls: "last" as const } }],
     ultimo: [{ fechaUltimoContacto: { sort: "asc" as const, nulls: "first" as const } }],
     ubicacion: [
       { bloque: { calle: "asc" as const } },

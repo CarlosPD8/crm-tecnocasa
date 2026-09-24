@@ -57,7 +57,7 @@ export async function obtenerCalendario(desdeISO: string, hastaISO: string): Pro
   const desdeAmplio = new Date(desde.getTime() - DIA_MS);
   const hastaAmplio = new Date(hasta.getTime() + DIA_MS);
 
-  const [eventos, proximos, contactos, operaciones, finesAlquiler] = await Promise.all([
+  const [eventos, proximos, proximosInmuebles, contactos, operaciones, finesAlquiler] = await Promise.all([
     db.evento.findMany({
       where: { inicio: { lt: hastaAmplio }, fin: { gte: desdeAmplio } },
       include: incluirEnlaces,
@@ -66,6 +66,16 @@ export async function obtenerCalendario(desdeISO: string, hastaISO: string): Pro
     db.cliente.findMany({
       where: { fechaProximoContacto: { gte: desdeAmplio, lt: hastaAmplio } },
       select: { id: true, nombre: true, apellidos: true, telefono: true, fechaProximoContacto: true },
+    }),
+    db.inmueble.findMany({
+      where: { fechaProximoContacto: { gte: desdeAmplio, lt: hastaAmplio } },
+      select: {
+        id: true,
+        referencia: true,
+        direccion: true,
+        fechaProximoContacto: true,
+        propietario: { select: { id: true, nombre: true, apellidos: true, telefono: true } },
+      },
     }),
     db.contacto.findMany({
       where: { fecha: { gte: desde, lt: hasta } },
@@ -106,6 +116,18 @@ export async function obtenerCalendario(desdeISO: string, hastaISO: string): Pro
       fin: null,
       notas: c.telefono,
       cliente: { id: c.id, nombre: nombre(c) },
+    })),
+    // A property follow-up: no `cliente` (that marks it as the property's own).
+    ...proximosInmuebles.map((i) => ({
+      id: i.id,
+      fuente: "proximo" as const,
+      titulo: `Contactar ${i.referencia} · ${i.direccion}`,
+      todoElDia: true,
+      inicio: aValor(i.fechaProximoContacto!, true),
+      fin: null,
+      notas: i.propietario?.telefono ?? null,
+      cliente: null,
+      inmueble: { id: i.id, referencia: i.referencia },
     })),
     ...contactos.map((c) => ({
       id: c.id,
@@ -228,19 +250,23 @@ export async function eliminarEvento(id: string) {
   return { success: true as const };
 }
 
-/** Dragging a follow-up in the calendar reschedules the client's next contact. */
-export async function moverProximoContacto(clienteId: string, dia: string) {
+/** Dragging a follow-up in the calendar reschedules the client's or the property's next contact. */
+export async function moverProximoContacto(id: string, dia: string, de: "cliente" | "inmueble" = "cliente") {
   const { db } = await getContexto();
   if (!DIA_RE.test(dia)) {
     return { success: false as const, error: "Fecha no válida." };
   }
-  const { count } = await db.cliente.updateMany({
-    where: { id: clienteId },
-    data: { fechaProximoContacto: aFecha(dia, true) },
-  });
-  if (!count) return { success: false as const, error: "Este cliente ya no existe." };
+  const data = { fechaProximoContacto: aFecha(dia, true) };
+  const { count } =
+    de === "inmueble"
+      ? await db.inmueble.updateMany({ where: { id }, data })
+      : await db.cliente.updateMany({ where: { id }, data });
+  if (!count) {
+    return { success: false as const, error: de === "inmueble" ? "Este inmueble ya no existe." : "Este cliente ya no existe." };
+  }
+  const lista = de === "inmueble" ? "/inmuebles" : "/clientes";
   revalidatePath("/");
-  revalidatePath("/clientes");
-  revalidatePath(`/clientes/${clienteId}`);
+  revalidatePath(lista);
+  revalidatePath(`${lista}/${id}`);
   return { success: true as const };
 }

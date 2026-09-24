@@ -36,6 +36,9 @@ function buildData(data: InmuebleInput) {
     adquisicionPotencial: data.adquisicionPotencial,
     // Date only: stored as UTC midnight of that day.
     fechaFinAlquiler: data.fechaFinAlquiler ? new Date(`${data.fechaFinAlquiler}T00:00:00.000Z`) : null,
+    fechaProximoContacto: data.fechaProximoContacto
+      ? new Date(`${data.fechaProximoContacto}T00:00:00.000Z`)
+      : null,
   };
 }
 
