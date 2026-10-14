@@ -3,6 +3,7 @@ import { condicionFecha, leerBool, leerFecha, leerMulti, leerRango } from "@/lib
 import { FILTROS_BLOQUES, FILTROS_CLIENTES, FILTROS_INMUEBLES, SIN_ASESOR } from "@/lib/filtros/definiciones";
 import { TIPO_CLIENTE_LABELS, normalizarDni } from "@/lib/validations/cliente";
 import {
+  CAPTACION_LABELS,
   ESTADO_INMUEBLE_LABELS,
   OCUPACION_LABELS,
   TIPO_INMUEBLE_LABELS,
@@ -42,6 +43,17 @@ function ocupacion(valor: string | undefined) {
   return [
     ...(conValor.length ? [{ ocupacion: { in: conValor } }] : []),
     ...(lista.includes("SIN_DATOS") ? [{ ocupacion: null }] : []),
+  ];
+}
+
+/** Acquisition marks from the URL; «Sin marca» is stored as null. */
+function captacion(valor: string | undefined) {
+  const lista = leerMulti(valor, claves(CAPTACION_LABELS));
+  if (!lista.length) return null;
+  const conValor = lista.filter((v) => v !== "SIN_MARCA") as ("POTENCIAL" | "NOTICIA")[];
+  return [
+    ...(conValor.length ? [{ captacion: { in: conValor } }] : []),
+    ...(lista.includes("SIN_MARCA") ? [{ captacion: null }] : []),
   ];
 }
 
@@ -132,6 +144,8 @@ export function consultaInmuebles(sp: SP) {
   if (localidades.length) and.push({ localidad: { in: localidades } });
   const ocup = ocupacion(sp.ocupacion);
   if (ocup) and.push({ OR: ocup });
+  const marcas = captacion(sp.captacion);
+  if (marcas) and.push({ OR: marcas });
   const asesoresInm = asesor(sp.asesor);
   if (asesoresInm) and.push({ OR: asesoresInm });
 
@@ -154,7 +168,6 @@ export function consultaInmuebles(sp: SP) {
 
   and.push(
     ...booleano(sp.enBloque, { bloqueId: { not: null } }, { bloqueId: null }),
-    ...booleano(sp.potencial, { adquisicionPotencial: true }, { adquisicionPotencial: false }),
     ...booleano(sp.propietario, { propietarioId: { not: null } }, { propietarioId: null }),
     ...booleano(sp.interesados, { intereses: { some: {} } }, { intereses: { none: {} } }),
     ...booleano(sp.citas, { eventos: { some: { fin: { gte: ahora } } } }, { eventos: { none: { fin: { gte: ahora } } } }),
@@ -214,9 +227,14 @@ export function consultaBloques(sp: SP) {
 
   and.push(
     ...booleano(
+      sp.noticias,
+      { inmuebles: { some: { captacion: "NOTICIA" as const } } },
+      { inmuebles: { none: { captacion: "NOTICIA" as const } } }
+    ),
+    ...booleano(
       sp.potenciales,
-      { inmuebles: { some: { adquisicionPotencial: true } } },
-      { inmuebles: { none: { adquisicionPotencial: true } } }
+      { inmuebles: { some: { captacion: "POTENCIAL" as const } } },
+      { inmuebles: { none: { captacion: "POTENCIAL" as const } } }
     ),
     ...booleano(
       sp.disponibles,

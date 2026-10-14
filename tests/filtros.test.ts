@@ -60,6 +60,11 @@ describe("consultas", () => {
     expect(where.AND).toContainEqual({ OR: [{ asesorId: { in: ["u1"] } }, { asesorId: null }] });
   });
 
+  it("filtra por captación incluyendo «Sin marca»", () => {
+    const { where } = consultaInmuebles({ captacion: "NOTICIA,SIN_MARCA,basura" });
+    expect(where.AND).toContainEqual({ OR: [{ captacion: { in: ["NOTICIA"] } }, { captacion: null }] });
+  });
+
   it("filtra y ordena por fin de alquiler", () => {
     const { where, orderBy } = consultaInmuebles({ finAlquiler: "p:sin", orden: "finAlquiler" });
     expect(where.AND).toContainEqual({ fechaFinAlquiler: null });

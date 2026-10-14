@@ -33,7 +33,7 @@ function buildData(data: InmuebleInput) {
     planta: toIntOrNull(data.planta),
     puerta: toNullable(data.puerta?.trim()),
     ocupacion: data.ocupacion === "SIN_DATOS" ? null : data.ocupacion,
-    adquisicionPotencial: data.adquisicionPotencial,
+    captacion: data.captacion === "SIN_MARCA" ? null : data.captacion,
     // Date only: stored as UTC midnight of that day.
     fechaFinAlquiler: data.fechaFinAlquiler ? new Date(`${data.fechaFinAlquiler}T00:00:00.000Z`) : null,
     fechaProximoContacto: data.fechaProximoContacto

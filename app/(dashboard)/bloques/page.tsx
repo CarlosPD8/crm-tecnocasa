@@ -21,7 +21,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Pagination } from "@/components/shared/pagination";
 import { BarraFiltros } from "@/components/shared/filtros/barra-filtros";
 import { OcupacionBar } from "@/components/bloques/ocupacion-bar";
-import { PotencialBadge } from "@/components/inmuebles/situacion";
+import { CaptacionBadge } from "@/components/inmuebles/situacion";
 import { consultaBloques } from "@/lib/filtros/consultas";
 import { contarFiltros, paramsDeFiltros } from "@/lib/filtros/definiciones";
 
@@ -104,7 +104,7 @@ export default async function BloquesPage({
                 <TableHead>Localidad</TableHead>
                 <TableHead className="text-right">Pisos</TableHead>
                 <TableHead>Ocupación</TableHead>
-                <TableHead>Potenciales</TableHead>
+                <TableHead>Captación</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -135,10 +135,20 @@ export default async function BloquesPage({
                       <OcupacionBar resumen={r.ocupacion} />
                     </TableCell>
                     <TableCell>
-                      {r.potenciales > 0 ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <PotencialBadge compact />
-                          <span className="tabular font-medium">{r.potenciales}</span>
+                      {r.noticias + r.potenciales > 0 ? (
+                        <span className="inline-flex items-center gap-3">
+                          {r.noticias > 0 && (
+                            <span className="inline-flex items-center gap-1.5">
+                              <CaptacionBadge captacion="NOTICIA" compact />
+                              <span className="tabular font-medium">{r.noticias}</span>
+                            </span>
+                          )}
+                          {r.potenciales > 0 && (
+                            <span className="inline-flex items-center gap-1.5">
+                              <CaptacionBadge captacion="POTENCIAL" compact />
+                              <span className="tabular font-medium">{r.potenciales}</span>
+                            </span>
+                          )}
                         </span>
                       ) : (
                         <span className="text-muted-foreground">—</span>

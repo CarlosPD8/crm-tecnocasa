@@ -1,16 +1,18 @@
 import Link from "next/link";
 import { differenceInCalendarDays, format, isToday, subDays } from "date-fns";
 import { es } from "date-fns/locale";
-import { ArrowUpRight, CalendarCheck, Handshake, Home, KeyRound, PhoneCall } from "lucide-react";
+import { ArrowUpRight, CalendarCheck, Handshake, Home, KeyRound, PhoneCall, Star } from "lucide-react";
 
 import { getContexto } from "@/lib/db";
 import { cn } from "@/lib/utils";
 import { hoyISO } from "@/lib/filtros/tipos";
 import { FinAlquiler } from "@/components/inmuebles/situacion";
 import { PageHeader } from "@/components/shared/page-header";
+import { ProximoContacto } from "@/components/shared/proximo-contacto";
 import {
   TIPO_INMUEBLE_LABELS,
   TIPO_OPERACION_LABELS,
+  formatUbicacion,
 } from "@/lib/validations/inmueble";
 
 const formatoPrecio = new Intl.NumberFormat("es-ES", {
@@ -113,6 +115,8 @@ export default async function DashboardPage() {
     operacionesRecientes,
     finesAlquiler,
     finesAlquilerTotal,
+    noticias,
+    noticiasTotal,
   ] = await Promise.all([
     db.cliente.count(),
     db.inmueble.count({ where: { estado: "DISPONIBLE" } }),
@@ -158,6 +162,14 @@ export default async function DashboardPage() {
       select: { id: true, referencia: true, direccion: true, localidad: true, fechaFinAlquiler: true },
     }),
     db.inmueble.count({ where: { fechaFinAlquiler: finAlquilerProximo } }),
+    // Flats whose owner is known to sell: the most urgent follow-up first.
+    db.inmueble.findMany({
+      where: { captacion: "NOTICIA" },
+      orderBy: [{ fechaProximoContacto: { sort: "asc", nulls: "last" } }, { updatedAt: "desc" }],
+      take: 6,
+      select: { ...selectInmuebleSeguimiento, escalera: true, planta: true, puerta: true },
+    }),
+    db.inmueble.count({ where: { captacion: "NOTICIA" } }),
   ]);
 
   const fechaLarga = format(ahora, "EEEE, d 'de' MMMM", { locale: es });
@@ -258,6 +270,48 @@ export default async function DashboardPage() {
                     >
                       {r.texto}
                     </span>
+                  </Row>
+                );
+              })
+            )}
+          </Panel>
+
+          <Panel
+            title="Noticias"
+            action={
+              noticiasTotal > 0
+                ? {
+                    href: "/inmuebles?captacion=NOTICIA&orden=proximo",
+                    label: noticiasTotal > noticias.length ? `Ver las ${noticiasTotal}` : "Ver en inmuebles",
+                  }
+                : undefined
+            }
+          >
+            {noticias.length === 0 ? (
+              <PanelEmpty icon={Star} text="Ningún piso marcado como noticia. Se marca en la ficha del inmueble." />
+            ) : (
+              noticias.map((inmueble) => {
+                const ubicacion = formatUbicacion(inmueble);
+                return (
+                  <Row key={inmueble.id} href={`/inmuebles/${inmueble.id}`}>
+                    <span className="w-20 shrink-0 font-mono text-xs text-muted-foreground">{inmueble.referencia}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">
+                        {inmueble.direccion}
+                        {ubicacion && <span className="font-normal text-muted-foreground"> · {ubicacion}</span>}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {inmueble.propietario
+                          ? [`${inmueble.propietario.nombre} ${inmueble.propietario.apellidos}`, inmueble.propietario.telefono]
+                              .filter(Boolean)
+                              .join(" · ")
+                          : inmueble.localidad}
+                      </span>
+                    </span>
+                    <ProximoContacto
+                      fecha={inmueble.fechaProximoContacto}
+                      className="shrink-0 flex-col items-end gap-1 text-xs sm:flex-row sm:items-center sm:gap-2"
+                    />
                   </Row>
                 );
               })

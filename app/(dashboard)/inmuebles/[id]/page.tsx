@@ -29,9 +29,9 @@ import { ContactosList } from "@/components/clientes/contactos-list";
 import { ContactoInmuebleForm } from "@/components/inmuebles/contacto-inmueble-form";
 import { ProximoContacto } from "@/components/shared/proximo-contacto";
 import {
+  CaptacionBadge,
   FinAlquiler,
   OcupacionBadge,
-  PotencialBadge,
   UltimoContacto,
 } from "@/components/inmuebles/situacion";
 import {
@@ -106,7 +106,7 @@ export default async function InmuebleDetallePage({
         eyebrow={
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-mono tracking-normal normal-case">{inmueble.referencia}</span>
-            {inmueble.adquisicionPotencial && <PotencialBadge />}
+            <CaptacionBadge captacion={inmueble.captacion} />
           </span>
         }
         title={
@@ -228,8 +228,8 @@ export default async function InmuebleDetallePage({
                   )}
                 </DataItem>
                 <DataItem label="Escalera · planta · puerta">{ubicacion ?? "—"}</DataItem>
-                <DataItem label="Adquisición potencial">
-                  {inmueble.adquisicionPotencial ? <PotencialBadge /> : "No"}
+                <DataItem label="Captación">
+                  {inmueble.captacion ? <CaptacionBadge captacion={inmueble.captacion} /> : "Sin marca"}
                 </DataItem>
                 {(inmueble.fechaFinAlquiler || inmueble.ocupacion === "INQUILINOS" || inmueble.estado === "ALQUILADO") && (
                   <DataItem label="Fin del alquiler">

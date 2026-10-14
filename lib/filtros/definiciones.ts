@@ -1,6 +1,7 @@
 import type { DefinicionFiltros } from "@/lib/filtros/tipos";
 import { TIPO_CLIENTE_LABELS } from "@/lib/validations/cliente";
 import {
+  CAPTACION_LABELS,
   ESTADO_INMUEBLE_LABELS,
   OCUPACION_LABELS,
   TIPO_INMUEBLE_LABELS,
@@ -61,7 +62,7 @@ export const FILTROS_INMUEBLES = {
     { clave: "escalera", etiqueta: "Escalera", grupo: "Ubicación", tipo: "texto", placeholder: "Izquierda, A…" },
     { clave: "planta", etiqueta: "Planta", grupo: "Ubicación", tipo: "rango", entero: true },
     { clave: "ocupacion", etiqueta: "Ocupación", grupo: "Situación", tipo: "multi", opciones: OCUPACION_LABELS },
-    { clave: "potencial", etiqueta: "Adquisición potencial", grupo: "Situación", tipo: "bool" },
+    { clave: "captacion", etiqueta: "Captación", grupo: "Situación", tipo: "multi", opciones: CAPTACION_LABELS },
     { clave: "propietario", etiqueta: "Con propietario asignado", grupo: "Situación", tipo: "bool" },
     { clave: "asesor", etiqueta: "Asesor responsable", grupo: "Situación", tipo: "multi", opciones: "dinamico" },
     {
@@ -109,6 +110,7 @@ export const FILTROS_BLOQUES = {
     { clave: "localidad", etiqueta: "Localidad", grupo: "Ubicación", tipo: "multi", opciones: "dinamico" },
     { clave: "cp", etiqueta: "Código postal", grupo: "Ubicación", tipo: "texto", placeholder: "18002" },
     { clave: "ocupacion", etiqueta: "Con algún piso…", grupo: "Pisos", tipo: "multi", opciones: OCUPACION_LABELS },
+    { clave: "noticias", etiqueta: "Con noticias", grupo: "Pisos", tipo: "bool" },
     { clave: "potenciales", etiqueta: "Con adquisiciones potenciales", grupo: "Pisos", tipo: "bool" },
     { clave: "disponibles", etiqueta: "Con pisos disponibles", grupo: "Pisos", tipo: "bool" },
     { clave: "conPisos", etiqueta: "Con pisos asignados", grupo: "Pisos", tipo: "bool" },

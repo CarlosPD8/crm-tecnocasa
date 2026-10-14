@@ -1,11 +1,11 @@
 import { differenceInCalendarDays, format, formatDistanceToNowStrict, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { Target } from "lucide-react";
+import { Star, Target } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { ocupacionLabel } from "@/lib/validations/inmueble";
+import { CAPTACION_LABELS, ocupacionLabel } from "@/lib/validations/inmueble";
 import { hoyISO } from "@/lib/filtros/tipos";
-import type { Ocupacion } from "@/lib/generated/prisma/enums";
+import type { Captacion, Ocupacion } from "@/lib/generated/prisma/enums";
 
 const OCUPACION_DOT: Record<Ocupacion | "SIN_DATOS", string> = {
   INQUILINOS: "bg-warning",
@@ -35,17 +35,36 @@ export function OcupacionBadge({
   );
 }
 
-export function PotencialBadge({ className, compact = false }: { className?: string; compact?: boolean }) {
+// A news item is the surer mark, so it gets the stronger color.
+const CAPTACION_ESTILO = {
+  POTENCIAL: { Icono: Target, badge: "bg-accent text-accent-foreground", icono: "" },
+  NOTICIA: { Icono: Star, badge: "bg-primary text-primary-foreground", icono: "fill-current" },
+} satisfies Record<Captacion, { Icono: typeof Star; badge: string; icono: string }>;
+
+/** Acquisition mark (target = potential, star = news); nothing when unmarked. */
+export function CaptacionBadge({
+  captacion,
+  className,
+  compact = false,
+}: {
+  captacion: Captacion | null;
+  className?: string;
+  compact?: boolean;
+}) {
+  if (!captacion) return null;
+  const { Icono, badge, icono } = CAPTACION_ESTILO[captacion];
+  const etiqueta = CAPTACION_LABELS[captacion];
   return (
     <span
-      title="Adquisición potencial"
+      title={etiqueta}
       className={cn(
-        "inline-flex items-center gap-1 rounded-md bg-accent px-1.5 py-0.5 text-[0.7rem] font-medium tracking-normal text-accent-foreground normal-case",
+        "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[0.7rem] font-medium tracking-normal normal-case",
+        badge,
         className
       )}
     >
-      <Target aria-hidden className="size-3" />
-      {compact ? <span className="sr-only">Adquisición potencial</span> : "Adquisición potencial"}
+      <Icono aria-hidden className={cn("size-3", icono)} />
+      {compact ? <span className="sr-only">{etiqueta}</span> : etiqueta}
     </span>
   );
 }

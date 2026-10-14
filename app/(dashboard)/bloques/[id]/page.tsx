@@ -24,7 +24,7 @@ import {
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { EstadoBadge } from "@/components/inmuebles/estado-badge";
-import { OcupacionBadge, PotencialBadge, UltimoContacto } from "@/components/inmuebles/situacion";
+import { CaptacionBadge, OcupacionBadge, UltimoContacto } from "@/components/inmuebles/situacion";
 import { EliminarBloqueDialog } from "@/components/bloques/eliminar-bloque-dialog";
 import { ENLACE_FILA } from "@/components/shared/row-link";
 import { FilaEnlace } from "@/components/shared/fila-enlace";
@@ -99,8 +99,8 @@ export default async function BloqueDetallePage({ params }: { params: Promise<{ 
       />
 
       {/* gap-px over a border-colored background draws the dividers at every breakpoint. */}
-      <dl className="rise grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-border/70 shadow-soft ring-1 ring-foreground/6 [animation-delay:60ms] sm:grid-cols-3 lg:grid-cols-6">
-        <div className="col-span-2 flex flex-col gap-2 bg-card p-5 sm:col-span-1">
+      <dl className="rise grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-border/70 shadow-soft ring-1 ring-foreground/6 [animation-delay:60ms] sm:grid-cols-3 lg:grid-cols-7">
+        <div className="col-span-2 flex flex-col gap-2 bg-card p-5 sm:col-span-3 lg:col-span-1">
           <dt className="eyebrow">Pisos</dt>
           <dd className="font-display tabular text-4xl leading-none">{bloque.inmuebles.length}</dd>
         </div>
@@ -110,6 +110,10 @@ export default async function BloqueDetallePage({ params }: { params: Promise<{ 
             <dd className="font-display tabular text-3xl leading-none">{resumen.ocupacion[k]}</dd>
           </div>
         ))}
+        <div className="flex flex-col gap-2 bg-card p-5">
+          <dt className="eyebrow">Noticias</dt>
+          <dd className="font-display tabular text-3xl leading-none text-primary">{resumen.noticias}</dd>
+        </div>
         <div className="flex flex-col gap-2 bg-card p-5">
           <dt className="eyebrow">Potenciales</dt>
           <dd className="font-display tabular text-3xl leading-none text-primary">{resumen.potenciales}</dd>
@@ -152,7 +156,7 @@ export default async function BloqueDetallePage({ params }: { params: Promise<{ 
                     className={cn("flex items-center gap-2 font-medium", ENLACE_FILA)}
                   >
                     {formatUbicacion(piso) ?? <span className="text-muted-foreground">Sin ubicar</span>}
-                    {piso.adquisicionPotencial && <PotencialBadge compact />}
+                    <CaptacionBadge captacion={piso.captacion} compact />
                   </Link>
                 </TableCell>
                 <TableCell className="font-mono text-xs">{piso.referencia}</TableCell>

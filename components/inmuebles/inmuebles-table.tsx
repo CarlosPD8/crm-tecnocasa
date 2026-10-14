@@ -14,7 +14,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { ENLACE_FILA } from "@/components/shared/row-link";
 import { FilaEnlace } from "@/components/shared/fila-enlace";
 import { EstadoBadge } from "@/components/inmuebles/estado-badge";
-import { OcupacionBadge, PotencialBadge, UltimoContacto } from "@/components/inmuebles/situacion";
+import { CaptacionBadge, OcupacionBadge, UltimoContacto } from "@/components/inmuebles/situacion";
 import {
   TIPO_INMUEBLE_LABELS,
   TIPO_OPERACION_LABELS,
@@ -92,7 +92,7 @@ export function InmueblesTable({
                   >
                     {inmueble.referencia}
                   </Link>
-                  {inmueble.adquisicionPotencial && <PotencialBadge compact />}
+                  <CaptacionBadge captacion={inmueble.captacion} compact />
                 </span>
               </TableCell>
               <TableCell>

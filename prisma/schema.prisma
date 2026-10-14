@@ -57,6 +57,13 @@ enum Ocupacion {
   VACIO
 }
 
+// Marca de captación, de menos a más segura. null = sin marca.
+// POTENCIAL: podría venderse. NOTICIA: se sabe que el propietario quiere vender.
+enum Captacion {
+  POTENCIAL
+  NOTICIA
+}
+
 enum TipoEvento {
   VISITA
   REUNION
@@ -260,7 +267,7 @@ model Inmueble {
   puerta   String?
 
   ocupacion            Ocupacion?
-  adquisicionPotencial Boolean    @default(false)
+  captacion            Captacion?
   fechaUltimoContacto  DateTime?
   // Día en que toca volver a contactar (UTC medianoche), como en Cliente.
   fechaProximoContacto DateTime?
@@ -283,10 +290,10 @@ model Inmueble {
   @@index([oficinaId, asesorId])
   @@index([oficinaId, fechaFinAlquiler])
   @@index([oficinaId, fechaProximoContacto])
+  @@index([oficinaId, captacion])
   @@index([bloqueId])
   @@index([bloqueId, escalera, planta, puerta])
   @@index([ocupacion])
-  @@index([adquisicionPotencial])
   @@index([fechaUltimoContacto])
   @@index([localidad])
   @@index([estado])

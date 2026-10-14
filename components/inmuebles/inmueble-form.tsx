@@ -14,6 +14,7 @@ import {
   ESTADO_INMUEBLE_LABELS,
   OCUPACION_LABELS,
   ESCALERA_SUGERENCIAS,
+  type CaptacionForm,
   type InmuebleInput,
 } from "@/lib/validations/inmueble";
 import { formatBloque } from "@/lib/validations/bloque";
@@ -45,7 +46,12 @@ import type { OpcionAsesor } from "@/lib/db";
 // Client Component: el llamador debe convertirlo a string antes de pasarlo.
 export type InmuebleParaFormulario = Omit<Inmueble, "precio"> & { precio: string };
 
-const SI_NO = { SI: "Sí", NO: "No" } as const;
+// The field label already says «Captación», so the options can be short.
+const CAPTACION_OPCIONES: Record<CaptacionForm, string> = {
+  SIN_MARCA: "Sin marca",
+  POTENCIAL: "Potencial",
+  NOTICIA: "Noticia",
+};
 
 /**
  * `asesores` is only passed to directors: it shows the advisor picker, which
@@ -97,7 +103,7 @@ export function InmuebleForm({
           planta: inmueble.planta?.toString() ?? "",
           puerta: inmueble.puerta ?? "",
           ocupacion: inmueble.ocupacion ?? "SIN_DATOS",
-          adquisicionPotencial: inmueble.adquisicionPotencial,
+          captacion: inmueble.captacion ?? "SIN_MARCA",
           fechaFinAlquiler: inmueble.fechaFinAlquiler?.toISOString().slice(0, 10) ?? "",
           fechaProximoContacto: inmueble.fechaProximoContacto?.toISOString().slice(0, 10) ?? "",
           ...(asesores ? { asesorId: inmueble.asesorId ?? "" } : {}),
@@ -110,7 +116,7 @@ export function InmuebleForm({
           direccion: bloqueInicial ? formatBloque(bloqueInicial) : "",
           localidad: bloqueInicial?.localidad ?? "",
           ocupacion: "SIN_DATOS",
-          adquisicionPotencial: false,
+          captacion: "SIN_MARCA",
           ...(asesores ? { asesorId: asesorInicial ?? "" } : {}),
         },
   });
@@ -255,17 +261,21 @@ export function InmuebleForm({
             />
           </Field>
         )}
-        <Field label="Adquisición potencial" hint="Marca los pisos que podrían captarse para la cartera.">
+        <Field
+          label="Captación"
+          className="sm:col-span-2"
+          hint="Potencial: podría venderse. Noticia: se sabe que el propietario quiere vender."
+        >
           <Controller
             control={control}
-            name="adquisicionPotencial"
+            name="captacion"
             render={({ field }) => (
               <Segmented
-                name="adquisicionPotencial"
-                aria-label="Adquisición potencial"
-                value={field.value ? "SI" : "NO"}
-                onChange={(v) => field.onChange(v === "SI")}
-                options={SI_NO}
+                name="captacion"
+                aria-label="Captación"
+                value={field.value}
+                onChange={field.onChange}
+                options={CAPTACION_OPCIONES}
               />
             )}
           />

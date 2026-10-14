@@ -3,6 +3,7 @@ import {
   TipoInmueble,
   TipoOperacion,
   EstadoInmueble,
+  type Captacion,
   type Ocupacion,
 } from "@/lib/generated/prisma/enums";
 
@@ -10,6 +11,10 @@ import {
 // as its own value and becomes null in the database.
 export const OCUPACION_FORM_VALUES = ["INQUILINOS", "PROPIETARIO", "VACIO", "SIN_DATOS"] as const;
 export type OcupacionForm = (typeof OCUPACION_FORM_VALUES)[number];
+
+// Same for the acquisition mark: «Sin marca» is null in the database.
+export const CAPTACION_FORM_VALUES = ["SIN_MARCA", "POTENCIAL", "NOTICIA"] as const;
+export type CaptacionForm = (typeof CAPTACION_FORM_VALUES)[number];
 
 export const inmuebleSchema = z.object({
   referencia: z.string().min(1, "La referencia es obligatoria"),
@@ -36,7 +41,7 @@ export const inmuebleSchema = z.object({
     .refine((v) => !v || Number.isInteger(Number(v)), "La planta debe ser un número entero (0 = Bajo)"),
   puerta: z.string().optional().or(z.literal("")),
   ocupacion: z.enum(OCUPACION_FORM_VALUES),
-  adquisicionPotencial: z.boolean(),
+  captacion: z.enum(CAPTACION_FORM_VALUES),
   fechaFinAlquiler: z
     .string()
     .optional()
@@ -86,6 +91,16 @@ export const OCUPACION_LABELS: Record<OcupacionForm, string> = {
 
 export function ocupacionLabel(ocupacion: Ocupacion | null) {
   return OCUPACION_LABELS[ocupacion ?? "SIN_DATOS"];
+}
+
+export const CAPTACION_LABELS: Record<CaptacionForm, string> = {
+  SIN_MARCA: "Sin marca",
+  POTENCIAL: "Adquisición potencial",
+  NOTICIA: "Noticia",
+};
+
+export function captacionLabel(captacion: Captacion | null) {
+  return CAPTACION_LABELS[captacion ?? "SIN_MARCA"];
 }
 
 export const ESCALERA_SUGERENCIAS = ["Izquierda", "Derecha", "A", "B", "C", "Única"];
