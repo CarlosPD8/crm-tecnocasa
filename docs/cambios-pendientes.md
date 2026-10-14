@@ -13,7 +13,7 @@ Estado de cada punto:
 
 | # | Cambio | Estado | Esfuerzo | Depende de |
 |---|---|---|---|---|
-| 1 | Marca «Noticia» | Hecho; falta desplegar y el paso 2 de la migración | ½ día | — |
+| 1 | Marca «Noticia» | Hecho y desplegado (14/10/2026) | ½ día | — |
 | 2 | Registro de actividad | Pendiente del cliente (tres preguntas) | 2–3 días | — |
 | 3 | Subzonas dentro de la oficina | Pendiente del cliente | 2–3 días | — |
 | 4 | Registrar solo desde la zona o la oficina (ubicación) | Pendiente del cliente | ~3,5 días | 2 y 3 |
@@ -28,12 +28,10 @@ Total aproximado: 10–12 días. El dosier incluye solo 2 h de mejoras al mes po
 
 ## 1. Marca «Noticia»
 
-**Estado (14/10/2026): implementado.** El cliente confirmó que un piso solo lleva una marca: «noticia» es un piso que se sabe al 100 % que se vende; «potencial», uno que quizá se venda. Campo `Inmueble.captacion` (null = sin marca, `POTENCIAL`, `NOTICIA`), insignia de estrella para noticia (diana para potencial) y lista «Noticias» en el panel de inicio. Para terminar:
+**Estado (14/10/2026): implementado y desplegado.** El cliente confirmó que un piso solo lleva una marca: «noticia» es un piso que se sabe al 100 % que se vende; «potencial», uno que quizá se venda. Campo `Inmueble.captacion` (null = sin marca, `POTENCIAL`, `NOTICIA`), insignia de estrella para noticia (diana para potencial) y lista «Noticias» en el panel de inicio. Las dos migraciones (`captacion_expand` y `captacion_contract`) están aplicadas en producción: `adquisicionPotencial` ya no existe. Pendiente:
 
-1. `npx prisma migrate deploy` (aplica `captacion_expand`: crea la columna y copia las potenciales) y, justo después, push a Vercel.
-2. Con la versión nueva ya en producción: mover `prisma/pendiente/20261014090100_captacion_contract` a `prisma/migrations/` y volver a ejecutar `npx prisma migrate deploy` (borra `adquisicionPotencial`).
-3. Opcional: `SEED_CONFIRMAR=demo npx prisma db seed` para que la demo tenga noticias (GR-2405 y GR-2419).
-4. Actualizar el manual de usuario.
+- Opcional: `SEED_CONFIRMAR=demo npx prisma db seed` para que la demo tenga noticias (GR-2405 y GR-2419).
+- Actualizar el manual de usuario.
 
 **Qué piden.** Igual que «Adquisición potencial», otra marca para los pisos que se sabe al 100 % que se quieren vender.
 
