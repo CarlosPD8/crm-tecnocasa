@@ -13,6 +13,8 @@ config({ path: ".env.local" });
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../lib/generated/prisma/client";
 import { extensionOficina } from "../lib/ambito-oficina";
+import { diaDe, frase, type NuevaActividad } from "../lib/actividad";
+import { hoyISO } from "../lib/filtros/tipos";
 import type {
   Captacion,
   EstadoInmueble,
@@ -542,6 +544,9 @@ async function main() {
   prisma = clienteDemo(director.id);
 
   console.log("Borrando datos de la oficina Demo…");
+  // La app nunca borra actividad (la extensión de ámbito no lo permite): aquí
+  // sí, con el cliente sin ámbito y solo la de Demo.
+  await base.actividad.deleteMany({ where: { oficinaId: OFICINA_DEMO } });
   // Orden por claves foráneas: primero lo que depende de clientes, inmuebles y bloques.
   await prisma.$transaction([
     prisma.evento.deleteMany(),
@@ -695,7 +700,10 @@ async function main() {
     }),
   });
 
-  const [bloques, clientes, inmuebles, contactosTotal, deInmueble, potenciales, noticias, intereses, operaciones, eventos] =
+  console.log("Creando actividad…");
+  await crearActividadDemo();
+
+  const [bloques, clientes, inmuebles, contactosTotal, deInmueble, potenciales, noticias, intereses, operaciones, eventos, actividad] =
     await Promise.all([
       prisma.bloque.count(),
       prisma.cliente.count(),
@@ -707,6 +715,7 @@ async function main() {
       prisma.interes.count(),
       prisma.operacion.count(),
       prisma.evento.count(),
+      prisma.actividad.count(),
     ]);
   console.log({
     bloques,
@@ -719,6 +728,114 @@ async function main() {
     intereses,
     operaciones,
     eventos,
+    actividad,
+  });
+}
+
+/**
+ * Registro de actividad de la demo: las mismas líneas que la carga inicial de
+ * la migración (altas, contactos, operaciones), dos cambios de estado que
+ * cuadran con los datos y una entrada en la app al empezar cada día. Las citas
+ * no: se crean todas hoy y llenarían el día de ruido.
+ */
+async function crearActividadDemo() {
+  const nombre = (p: { nombre: string; apellidos: string } | null) => (p ? `${p.nombre} ${p.apellidos}` : null);
+  const [clientes, inmuebles, bloques, contactos, operaciones] = await Promise.all([
+    prisma.cliente.findMany({ select: { id: true, nombre: true, apellidos: true, createdAt: true } }),
+    prisma.inmueble.findMany({
+      select: { id: true, referencia: true, direccion: true, bloqueId: true, estado: true, createdAt: true },
+    }),
+    prisma.bloque.findMany({ select: { id: true, calle: true, numero: true } }),
+    prisma.contacto.findMany({
+      include: {
+        cliente: { select: { nombre: true, apellidos: true } },
+        inmueble: { select: { referencia: true } },
+      },
+    }),
+    prisma.operacion.findMany({
+      include: {
+        cliente: { select: { nombre: true, apellidos: true } },
+        inmueble: { select: { referencia: true } },
+      },
+    }),
+  ]);
+
+  const lineas: { fecha: Date; linea: NuevaActividad }[] = [
+    // Un bloque se da de alta justo antes que su primer piso.
+    ...bloques.map((b) => {
+      const pisos = inmuebles.filter((i) => i.bloqueId === b.id).map((i) => i.createdAt.getTime());
+      const primero = pisos.length ? Math.min(...pisos) : Date.now();
+      return {
+        fecha: new Date(primero - 30 * 60 * 1000),
+        linea: { accion: "ALTA" as const, entidad: "BLOQUE" as const, entidadId: b.id, enlace: `/bloques/${b.id}`, resumen: frase.altaBloque(`${b.calle} ${b.numero}`) },
+      };
+    }),
+    ...clientes.map((c) => ({
+      fecha: c.createdAt,
+      linea: { accion: "ALTA" as const, entidad: "CLIENTE" as const, entidadId: c.id, enlace: `/clientes/${c.id}`, resumen: frase.altaCliente(nombre(c)!) },
+    })),
+    ...inmuebles.map((i) => ({
+      fecha: i.createdAt,
+      linea: { accion: "ALTA" as const, entidad: "INMUEBLE" as const, entidadId: i.id, enlace: `/inmuebles/${i.id}`, resumen: frase.altaInmueble(i.referencia, i.direccion) },
+    })),
+    ...contactos.map((c) => ({
+      fecha: c.fecha,
+      linea: {
+        accion: "CONTACTO" as const,
+        entidad: "CONTACTO" as const,
+        entidadId: c.id,
+        enlace: c.inmuebleId ? `/inmuebles/${c.inmuebleId}` : `/clientes/${c.clienteId}`,
+        resumen: frase.contacto(nombre(c.cliente), c.inmueble?.referencia ?? null),
+        detalle: c.nota,
+      },
+    })),
+    ...operaciones.map((o) => ({
+      fecha: o.fecha,
+      linea: {
+        accion: "OPERACION" as const,
+        entidad: "OPERACION" as const,
+        entidadId: o.id,
+        enlace: `/inmuebles/${o.inmuebleId}`,
+        resumen: frase.operacion(o.tipoOperacion, o.inmueble.referencia, o.precioFinal, nombre(o.cliente)!),
+        detalle: o.notas,
+      },
+    })),
+    ...inmuebles
+      .filter((i) => i.estado === "RESERVADO")
+      .map((i, n) => ({
+        fecha: dia(-2 - n, 17, 20),
+        linea: {
+          accion: "CAMBIO" as const,
+          entidad: "INMUEBLE" as const,
+          entidadId: i.id,
+          enlace: `/inmuebles/${i.id}`,
+          resumen: `Pasó ${i.referencia} a Reservado`,
+          cambios: [{ campo: "Estado", antes: "Disponible", despues: "Reservado" }],
+        },
+      })),
+  ];
+
+  // Una entrada en la app unos minutos antes de lo primero que hizo cada día.
+  const primeraDelDia = new Map<string, Date>();
+  for (const { fecha } of lineas) {
+    const clave = hoyISO(fecha);
+    const actual = primeraDelDia.get(clave);
+    if (!actual || fecha < actual) primeraDelDia.set(clave, fecha);
+  }
+  for (const primera of primeraDelDia.values()) {
+    lineas.push({
+      fecha: new Date(primera.getTime() - 7 * 60 * 1000),
+      linea: { accion: "ENTRADA", resumen: "Entró en la app" },
+    });
+  }
+
+  await prisma.actividad.createMany({
+    data: lineas.map(({ fecha, linea: { cambios, ...resto } }) => ({
+      ...resto,
+      ...(cambios ? { cambios } : {}),
+      fecha,
+      dia: diaDe(fecha),
+    })),
   });
 }
 

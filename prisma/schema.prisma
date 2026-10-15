@@ -64,6 +64,29 @@ enum Captacion {
   NOTICIA
 }
 
+// Registro de actividad: qué tipo de cosa hizo alguien.
+enum AccionActividad {
+  ENTRADA // abrió la app (tras 30 min sin usarla)
+  ALTA
+  CAMBIO
+  BAJA // borrado
+  CONTACTO // registró una llamada o visita
+  OPERACION // cerró una venta o un alquiler
+}
+
+// Sobre qué lo hizo.
+enum EntidadActividad {
+  CLIENTE
+  INMUEBLE
+  BLOQUE
+  CONTACTO
+  EVENTO
+  ARCHIVO
+  INTERES
+  OPERACION
+  USUARIO
+}
+
 enum TipoEvento {
   VISITA
   REUNION
@@ -92,6 +115,7 @@ model Oficina {
   intereses   Interes[]
   operaciones Operacion[]
   archivos    Archivo[]
+  actividades Actividad[]
 }
 
 // Perfil de un usuario de Supabase Auth (id = auth.users.id). Nunca se borra:
@@ -105,6 +129,9 @@ model Usuario {
   activo              Boolean    @default(true)
   // Contraseña temporal puesta por el director: hay que cambiarla al entrar.
   debeCambiarPassword Boolean    @default(true)
+  // Última petición a la app (se escribe como mucho cada 5 min). Sirve para
+  // contar las entradas: 30 min sin usarla y volver es una entrada nueva.
+  ultimoAcceso        DateTime?
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
 
@@ -119,6 +146,8 @@ model Usuario {
   eventosCreados     Evento[]    @relation("EventoCreadoPor")
   operacionesCreadas Operacion[] @relation("OperacionCreadoPor")
   archivosCreados    Archivo[]   @relation("ArchivoCreadoPor")
+  interesesCreados   Interes[]   @relation("InteresCreadoPor")
+  actividades        Actividad[] @relation("ActividadCreadoPor")
 
   @@index([oficinaId])
 }
@@ -304,15 +333,17 @@ model Inmueble {
 }
 
 model Interes {
-  id         String   @id @default(cuid())
-  oficinaId  String   @default(dbgenerated("crm_sin_oficina()"))
-  clienteId  String
-  inmuebleId String
-  fecha      DateTime @default(now())
+  id          String   @id @default(cuid())
+  oficinaId   String   @default(dbgenerated("crm_sin_oficina()"))
+  clienteId   String
+  inmuebleId  String
+  fecha       DateTime @default(now())
+  creadoPorId String?
 
-  oficina  Oficina  @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
-  cliente  Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  inmueble Inmueble @relation(fields: [inmuebleId], references: [id], onDelete: Cascade)
+  oficina   Oficina  @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
+  cliente   Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  inmueble  Inmueble @relation(fields: [inmuebleId], references: [id], onDelete: Cascade)
+  creadoPor Usuario? @relation("InteresCreadoPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
 
   @@index([oficinaId])
   @@index([clienteId])
@@ -367,4 +398,34 @@ model Archivo {
   @@index([inmuebleId])
   @@index([categoria])
   @@index([inmuebleId, categoria, orden])
+}
+
+// Registro de actividad de la oficina: qué hizo cada persona y cuándo. Solo lo
+// ven los directores y se conserva siempre (la app solo inserta y lee).
+// No enlaza a la ficha con una FK: el resumen se guarda como texto porque la
+// ficha puede borrarse, y `enlace` es la ruta para abrirla mientras exista.
+model Actividad {
+  id          String            @id @default(cuid())
+  oficinaId   String            @default(dbgenerated("crm_sin_oficina()"))
+  // Quién lo hizo (lo pone la extensión de ámbito, como en las demás tablas).
+  creadoPorId String?
+  fecha       DateTime          @default(now())
+  // Día en España, para agrupar y filtrar por días.
+  dia         DateTime          @db.Date
+  accion      AccionActividad
+  entidad     EntidadActividad?
+  entidadId   String?
+  enlace      String?
+  // «Dio de alta GR-2431 · C/ Estrellas 22», sin el nombre de quien lo hizo.
+  resumen     String
+  // Texto de apoyo, como la nota de un contacto.
+  detalle     String?
+  // Campos cambiados: [{ campo, antes, despues }], ya formateados.
+  cambios     Json?
+
+  oficina   Oficina  @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
+  creadoPor Usuario? @relation("ActividadCreadoPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
+
+  @@index([oficinaId, dia])
+  @@index([oficinaId, creadoPorId, dia])
 }

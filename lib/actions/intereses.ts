@@ -1,12 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { existe, getContexto } from "@/lib/db";
+import { getContexto } from "@/lib/db";
+import { registrarActividad } from "@/lib/actividad";
 
 export async function agregarInteres(inmuebleId: string, clienteId: string) {
   const { db } = await getContexto();
 
-  if (!(await existe(db, "inmueble", inmuebleId)) || !(await existe(db, "cliente", clienteId))) {
+  const [inmueble, cliente] = await Promise.all([
+    db.inmueble.findUnique({ where: { id: inmuebleId }, select: { referencia: true } }),
+    db.cliente.findUnique({ where: { id: clienteId }, select: { nombre: true, apellidos: true } }),
+  ]);
+  if (!inmueble || !cliente) {
     return { success: false as const, error: "Ese cliente o inmueble ya no existe." };
   }
 
@@ -17,7 +22,16 @@ export async function agregarInteres(inmuebleId: string, clienteId: string) {
     return { success: false as const, error: "Ese cliente ya está marcado como interesado." };
   }
 
-  await db.interes.create({ data: { inmuebleId, clienteId } });
+  await db.$transaction(async (tx) => {
+    const interes = await tx.interes.create({ data: { inmuebleId, clienteId } });
+    await registrarActividad(tx, {
+      accion: "ALTA",
+      entidad: "INTERES",
+      entidadId: interes.id,
+      enlace: `/inmuebles/${inmuebleId}`,
+      resumen: `Añadió a ${cliente.nombre} ${cliente.apellidos} a los interesados de ${inmueble.referencia}`,
+    });
+  });
 
   revalidatePath(`/inmuebles/${inmuebleId}`);
   revalidatePath(`/clientes/${clienteId}`);
@@ -27,9 +41,26 @@ export async function agregarInteres(inmuebleId: string, clienteId: string) {
 export async function quitarInteres(interesId: string) {
   const { db } = await getContexto();
 
-  const interes = await db.interes.findUnique({ where: { id: interesId } });
+  const interes = await db.interes.findUnique({
+    where: { id: interesId },
+    include: {
+      cliente: { select: { nombre: true, apellidos: true } },
+      inmueble: { select: { referencia: true } },
+    },
+  });
   if (!interes) return { success: false as const, error: "Ese interés ya no existe." };
-  await db.interes.deleteMany({ where: { id: interesId } });
+  await db.$transaction(async (tx) => {
+    const { count } = await tx.interes.deleteMany({ where: { id: interesId } });
+    if (count) {
+      await registrarActividad(tx, {
+        accion: "BAJA",
+        entidad: "INTERES",
+        entidadId: interesId,
+        enlace: `/inmuebles/${interes.inmuebleId}`,
+        resumen: `Quitó a ${interes.cliente.nombre} ${interes.cliente.apellidos} de los interesados de ${interes.inmueble.referencia}`,
+      });
+    }
+  });
 
   revalidatePath(`/inmuebles/${interes.inmuebleId}`);
   revalidatePath(`/clientes/${interes.clienteId}`);

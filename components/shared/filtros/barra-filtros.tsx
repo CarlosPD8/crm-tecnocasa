@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Download, Funnel, LoaderCircle, RotateCcw, Search, X } from "lucide-react";
+import { Download, FileText, Funnel, LoaderCircle, RotateCcw, Search, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { DEFINICIONES, type EntidadFiltrable } from "@/lib/filtros/definiciones";
-import { LIMITE_EXPORTACION } from "@/lib/exportar/limite";
+import { LIMITE_EXPORTACION, LIMITE_PDF } from "@/lib/exportar/limite";
 import {
   describirValor,
   leerFecha,
@@ -40,6 +40,7 @@ export function BarraFiltros({
   ariaBusqueda,
   opciones = {},
   exportar,
+  pdf,
 }: {
   entidad: EntidadFiltrable;
   placeholder: string;
@@ -48,6 +49,8 @@ export function BarraFiltros({
   opciones?: OpcionesDinamicas;
   /** Directors only: offers the Excel of what the list shows (`total` rows). */
   exportar?: { total: number };
+  /** Everyone: the same list as a landscape PDF to print. */
+  pdf?: { total: number };
 }) {
   const definicion = DEFINICIONES[entidad];
   const campos = definicion.campos as readonly Campo[];
@@ -160,25 +163,28 @@ export function BarraFiltros({
                   <Funnel className="size-4 text-primary" />
                   <h2 className="text-sm font-semibold">Filtros</h2>
                 </div>
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  Ordenar por
-                  <Select
-                    items={ordenes}
-                    value={borrador.orden ?? ordenPorDefecto}
-                    onValueChange={(v) => set("orden", v as string)}
-                  >
-                    <SelectTrigger size="sm" className="w-56" aria-label="Ordenar por">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(ordenes).map(([valor, etiqueta]) => (
-                        <SelectItem key={valor} value={valor}>
-                          {etiqueta}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </label>
+                {/* A list with a single order (the activity log) has nothing to choose. */}
+                {Object.keys(ordenes).length > 1 && (
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    Ordenar por
+                    <Select
+                      items={ordenes}
+                      value={borrador.orden ?? ordenPorDefecto}
+                      onValueChange={(v) => set("orden", v as string)}
+                    >
+                      <SelectTrigger size="sm" className="w-56" aria-label="Ordenar por">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(ordenes).map(([valor, etiqueta]) => (
+                          <SelectItem key={valor} value={valor}>
+                            {etiqueta}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                )}
               </header>
 
               <div className="flex-1 overflow-y-auto overscroll-contain px-4">
@@ -225,7 +231,12 @@ export function BarraFiltros({
           </PopoverContent>
         </Popover>
 
-        {exportar && <BotonExportar total={exportar.total} />}
+        {(pdf || exportar) && (
+          <div className="ml-auto flex shrink-0 gap-2">
+            {pdf && <BotonPdf total={pdf.total} />}
+            {exportar && <BotonExportar total={exportar.total} />}
+          </div>
+        )}
       </div>
 
       {activos.length > 0 && (
@@ -462,19 +473,24 @@ function Booleano({ campo, valor, onChange }: { campo: CampoBool; valor: string;
 }
 
 /** Downloads the list as .xlsx with the current search, filters and order. */
-function BotonExportar({ total }: { total: number }) {
+/** `/inmuebles/exportar?…`: the current filters and order, without the page. */
+function useRutaConFiltros(sufijo: string) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const params = new URLSearchParams(searchParams.toString());
   params.delete("page");
   const query = params.toString();
-  const href = `${pathname}/exportar${query ? `?${query}` : ""}`;
+  return `${pathname}/${sufijo}${query ? `?${query}` : ""}`;
+}
+
+function BotonExportar({ total }: { total: number }) {
+  const href = useRutaConFiltros("exportar");
 
   if (total === 0 || total > LIMITE_EXPORTACION) {
     return (
       <Button
         variant="outline"
-        className="ml-auto h-9 shrink-0 gap-2"
+        className="h-9 shrink-0 gap-2"
         disabled
         title={total === 0 ? "No hay nada que exportar" : `Máximo ${LIMITE_EXPORTACION.toLocaleString("es-ES")} filas por archivo: filtra un poco más`}
       >
@@ -485,11 +501,39 @@ function BotonExportar({ total }: { total: number }) {
   return (
     <Button
       variant="outline"
-      className="ml-auto h-9 shrink-0 gap-2"
+      className="h-9 shrink-0 gap-2"
       nativeButton={false}
       render={<a href={href} download aria-label={`Exportar ${total} a Excel`} />}
     >
       <Download /> <span className="hidden sm:inline">Exportar</span>
+    </Button>
+  );
+}
+
+/** Opens the PDF in a new tab, where the browser lets you print or save it. */
+function BotonPdf({ total }: { total: number }) {
+  const href = useRutaConFiltros("pdf");
+
+  if (total === 0 || total > LIMITE_PDF) {
+    return (
+      <Button
+        variant="outline"
+        className="h-9 shrink-0 gap-2"
+        disabled
+        title={total === 0 ? "No hay nada que imprimir" : `Máximo ${LIMITE_PDF.toLocaleString("es-ES")} filas por PDF: filtra un poco más`}
+      >
+        <FileText /> <span className="hidden sm:inline">PDF</span>
+      </Button>
+    );
+  }
+  return (
+    <Button
+      variant="outline"
+      className="h-9 shrink-0 gap-2"
+      nativeButton={false}
+      render={<a href={href} target="_blank" rel="noopener" aria-label={`Ver ${total} en PDF`} />}
+    >
+      <FileText /> <span className="hidden sm:inline">PDF</span>
     </Button>
   );
 }

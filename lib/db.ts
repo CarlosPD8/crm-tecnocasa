@@ -1,10 +1,12 @@
 import "server-only";
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
+import { after } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { extensionOficina } from "@/lib/ambito-oficina";
+import { registrarActividad } from "@/lib/actividad";
 import type { RolUsuario } from "@/lib/generated/prisma/enums";
 
 /**
@@ -44,6 +46,39 @@ export const getSesionPerfil = cache(async () => {
   return { id, email: data.claims.email as string | undefined, usuario };
 });
 
+const MINUTO = 60 * 1000;
+/** Last access is written at most this often… */
+const ANOTAR_CADA = 5 * MINUTO;
+/** …and coming back after this long away counts as a new visit («Entradas»). */
+const NUEVA_ENTRADA = 30 * MINUTO;
+
+/**
+ * Keeps `ultimoAcceso` current and logs a visit after a pause. Runs after the
+ * response, so it never slows a page down. The update is conditional on the
+ * value just read: of several parallel requests, only one logs the visit.
+ */
+function anotarAcceso(usuario: { id: string; oficinaId: string; ultimoAcceso: Date | null }) {
+  const ahora = new Date();
+  const anterior = usuario.ultimoAcceso;
+  const pausa = anterior ? ahora.getTime() - anterior.getTime() : Infinity;
+  if (pausa < ANOTAR_CADA) return;
+
+  after(async () => {
+    try {
+      const db = crearDbOficina(usuario.oficinaId, usuario.id);
+      const { count } = await db.usuario.updateMany({
+        where: { id: usuario.id, ultimoAcceso: anterior },
+        data: { ultimoAcceso: ahora },
+      });
+      if (count && pausa >= NUEVA_ENTRADA) {
+        await registrarActividad(db, { accion: "ENTRADA", resumen: "Entró en la app" }, ahora);
+      }
+    } catch (error) {
+      console.error("No se pudo anotar el acceso", error);
+    }
+  });
+}
+
 type Resolucion =
   | { estado: "ok"; ctx: Contexto }
   | { estado: "sin-sesion" | "sin-acceso" | "cambiar-contrasena" };
@@ -56,6 +91,7 @@ const resolverContexto = cache(async (): Promise<Resolucion> => {
   // once, even with a still-valid JWT.
   if (!usuario || !usuario.activo || !usuario.oficina.activa) return { estado: "sin-acceso" };
   if (usuario.debeCambiarPassword) return { estado: "cambiar-contrasena" };
+  anotarAcceso(usuario);
 
   return {
     estado: "ok",

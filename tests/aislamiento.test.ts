@@ -150,6 +150,33 @@ describe.skipIf(!url)("aislamiento entre oficinas", () => {
     expect(dentro.creado).toMatchObject({ oficinaId: "ofiA", creadoPorId: "userA" });
   });
 
+  it("el registro de actividad solo se crea y se lee, y no cruza oficinas", async () => {
+    const dia = new Date("2026-10-14T00:00:00.000Z");
+    const linea = await dbA.actividad.create({ data: { accion: "ALTA", resumen: "Dio de alta a Cli A", dia } });
+    expect(linea).toMatchObject({ oficinaId: "ofiA", creadoPorId: "userA" });
+    expect(await dbB.actividad.count()).toBe(0);
+    expect(await dbB.actividad.findUnique({ where: { id: linea.id } })).toBeNull();
+    await expect(dbA.actividad.update({ where: { id: linea.id }, data: { resumen: "x" } })).rejects.toThrow(
+      /no se puede modificar/
+    );
+    await expect(dbA.actividad.deleteMany({})).rejects.toThrow(/no se puede modificar/);
+    // The database refuses too, without the extension.
+    await expect(base.actividad.update({ where: { id: linea.id }, data: { resumen: "x" } })).rejects.toThrow(
+      /no se puede modificar/
+    );
+    await expect(
+      base.actividad.create({ data: { oficinaId: "ofiB", creadoPorId: "userA", accion: "ALTA", resumen: "x", dia } })
+    ).rejects.toThrow(/otra oficina/);
+  });
+
+  it("los interesados guardan quién los añadió", async () => {
+    const interes = await dbA.interes.create({ data: { clienteId: ids.clienteA, inmuebleId: ids.inmuebleA } });
+    expect(interes.creadoPorId).toBe("userA");
+    await expect(
+      base.interes.update({ where: { id: interes.id }, data: { creadoPorId: "userB" } })
+    ).rejects.toThrow(/otra oficina/);
+  });
+
   it("los include y los _count solo alcanzan filas de la oficina", async () => {
     const inm = await dbA.inmueble.findUniqueOrThrow({
       where: { id: ids.inmuebleA },

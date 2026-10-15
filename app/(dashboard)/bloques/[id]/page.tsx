@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Home, Pencil, Plus } from "lucide-react";
+import { FileText, Home, Pencil, Plus } from "lucide-react";
 
 import { getContexto } from "@/lib/db";
 import { resumenPorBloque } from "@/lib/bloques";
@@ -74,6 +74,19 @@ export default async function BloqueDetallePage({ params }: { params: Promise<{ 
           <>
             {esDirector && (
               <EliminarBloqueDialog bloqueId={bloque.id} direccion={direccion} pisos={bloque.inmuebles.length} />
+            )}
+            {bloque.inmuebles.length > 0 && (
+              <Button
+                variant="outline"
+                size="lg"
+                nativeButton={false}
+                render={
+                  // A route handler, not a page: a plain link that opens the browser's PDF viewer.
+                  <a href={`/bloques/${bloque.id}/pdf`} target="_blank" rel="noopener">
+                    <FileText /> Hoja en PDF
+                  </a>
+                }
+              />
             )}
             <Button
               variant="outline"

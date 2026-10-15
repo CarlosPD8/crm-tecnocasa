@@ -14,10 +14,10 @@ Estado de cada punto:
 | # | Cambio | Estado | Esfuerzo | Depende de |
 |---|---|---|---|---|
 | 1 | Marca «Noticia» | Hecho y desplegado (14/10/2026) | ½ día | — |
-| 2 | Registro de actividad | Pendiente del cliente (tres preguntas) | 2–3 días | — |
+| 2 | Registro de actividad | Hecho y migrado; falta desplegar | 2–3 días | — |
 | 3 | Subzonas dentro de la oficina | Pendiente del cliente | 2–3 días | — |
 | 4 | Registrar solo desde la zona o la oficina (ubicación) | Pendiente del cliente | ~3,5 días | 2 y 3 |
-| 5 | Exportar a PDF apaisado | Pendiente del cliente | 1 día | — |
+| 5 | Exportar a PDF apaisado | Hecho; falta desplegar | 1 día | — |
 | — | Importador de Excel | Necesario antes del piloto | por estimar | su Excel real |
 
 Orden propuesto: 1 → 2 → 3 → 5 → 4. El registro de actividad va antes porque es la base de los controles del punto 4.
@@ -28,10 +28,7 @@ Total aproximado: 10–12 días. El dosier incluye solo 2 h de mejoras al mes po
 
 ## 1. Marca «Noticia»
 
-**Estado (14/10/2026): implementado y desplegado.** El cliente confirmó que un piso solo lleva una marca: «noticia» es un piso que se sabe al 100 % que se vende; «potencial», uno que quizá se venda. Campo `Inmueble.captacion` (null = sin marca, `POTENCIAL`, `NOTICIA`), insignia de estrella para noticia (diana para potencial) y lista «Noticias» en el panel de inicio. Las dos migraciones (`captacion_expand` y `captacion_contract`) están aplicadas en producción: `adquisicionPotencial` ya no existe. Pendiente:
-
-- Opcional: `SEED_CONFIRMAR=demo npx prisma db seed` para que la demo tenga noticias (GR-2405 y GR-2419).
-- Actualizar el manual de usuario.
+**Estado (14/10/2026): implementado y desplegado.** El cliente confirmó que un piso solo lleva una marca: «noticia» es un piso que se sabe al 100 % que se vende; «potencial», uno que quizá se venda. Campo `Inmueble.captacion` (null = sin marca, `POTENCIAL`, `NOTICIA`), insignia de estrella para noticia (diana para potencial) y lista «Noticias» en el panel de inicio. Las dos migraciones (`captacion_expand` y `captacion_contract`) están aplicadas en producción: `adquisicionPotencial` ya no existe. El manual de usuario ya lo explica. Pendiente, opcional: `SEED_CONFIRMAR=demo npx prisma db seed` para que la demo tenga noticias (GR-2405 y GR-2419).
 
 **Qué piden.** Igual que «Adquisición potencial», otra marca para los pisos que se sabe al 100 % que se quieren vender.
 
@@ -53,6 +50,16 @@ Total aproximado: 10–12 días. El dosier incluye solo 2 h de mejoras al mes po
 ---
 
 ## 2. Registro de actividad (solo directores)
+
+**Estado (14/10/2026): implementado y con la migración aplicada; falta desplegar.** Respuestas del cliente: quieren ver también las entradas en la app, solo lo ven los directores y se conserva siempre. Lo hecho:
+
+- Tabla `Actividad` (migración `registro_actividad`): solo se inserta y se lee; la extensión de ámbito y un trigger impiden modificarla. La carga inicial rellena las altas, contactos, citas, archivos y operaciones que ya existían.
+- Cada acción de `lib/actions/*` escribe su línea en la misma transacción (`lib/actividad.ts`), con «antes → después» en los cambios. No se registran el orden de las fotos ni los cambios de contraseña propios.
+- **Entradas:** cuenta como entrada abrir la app tras 30 min sin usarla (`Usuario.ultimoAcceso`, en `lib/db.ts`). Contar solo los inicios de sesión no serviría: la sesión dura semanas.
+- Pantalla `/actividad` (menú «Actividad», solo directores): por día y persona, con resumen, detalle desplegable, filtros (fechas, persona, tipo), buscador y Excel. Sin filtro de fechas, los últimos 7 días.
+- `Interes.creadoPorId`.
+
+La migración ya está aplicada en producción (14/10/2026): solo falta el push a Vercel. Pendiente: avisar por escrito a los asesores de que existe el registro (transparencia) y explicarlo en el manual.
 
 **Qué piden.** Una pantalla donde el director vea qué ha hecho cada asesor por día y hora: «Marta hoy ha hecho…, ayer…, anteayer…».
 
@@ -89,10 +96,10 @@ Total aproximado: 10–12 días. El dosier incluye solo 2 h de mejoras al mes po
 - **Tamaño estimado:** ~35 MB/año por oficina activa. No supone coste.
 - **Aviso legal:** los asesores deben saber que existe el registro, por transparencia. Es menos delicado que la geolocalización.
 
-**Preguntas abiertas para el cliente.**
-1. ¿Quieren ver también cuándo entra cada asesor en la app, o solo lo que hace dentro?
-2. ¿Cada asesor puede ver su propio histórico, o es solo para directores?
-3. ¿Cuánto tiempo se conserva: siempre, o por ejemplo 12 meses?
+**Preguntas al cliente (respondidas el 14/10/2026).**
+1. ¿Quieren ver también cuándo entra cada asesor en la app, o solo lo que hace dentro? **Sí, también las entradas.**
+2. ¿Cada asesor puede ver su propio histórico, o es solo para directores? **Solo directores.**
+3. ¿Cuánto tiempo se conserva: siempre, o por ejemplo 12 meses? **Siempre.**
 
 ---
 
@@ -167,6 +174,14 @@ Total aproximado: 10–12 días. El dosier incluye solo 2 h de mejoras al mes po
 
 ## 5. Exportar a PDF apaisado
 
+**Estado (14/10/2026): implementado, falta desplegar** (no lleva migración). Lo hecho:
+
+- Botón **PDF** en Inmuebles, Clientes y Bloques, con la lista tal como esté filtrada, y **Hoja en PDF** en la ficha de cada bloque, piso por piso con una columna de notas para escribir a mano.
+- Lo puede sacar **cualquier asesor** (el Excel sigue siendo solo del director). Se abre en una pestaña nueva y desde ahí se imprime o se guarda.
+- Columnas: inmuebles (referencia, dirección, bloque, captación, estado, propietario, teléfono, último y próximo contacto); clientes (nombre, etiquetas, teléfono, email, dirección, asesor, último y próximo contacto); bloques (recuentos de ocupación, noticias y potenciales); hoja del bloque (piso, ocupación, captación, estado, propietario, teléfono, último y próximo contacto, notas).
+- Cabecera con la oficina, la fecha y los filtros; totales al final; «Página X de Y» en el pie. Máximo 2.000 filas.
+- Hecho con `pdf-lib` en `lib/pdf/` (JavaScript puro, sin navegador ni archivos de fuentes). Las fuentes estándar no tienen emojis: salen como «?».
+
 **Qué piden.** Además del Excel, exportar a PDF en horizontal «como una factura».
 
 **Propuesta.**
@@ -179,10 +194,10 @@ Total aproximado: 10–12 días. El dosier incluye solo 2 h de mejoras al mes po
 - **Límite:** unas 1.000–2.000 filas por PDF.
 - **Coste:** ninguno (1–2 s de servidor por PDF).
 
-**Preguntas abiertas para el cliente.**
-1. ¿Qué quieren imprimir: las listas generales, o **la hoja de un bloque o de una zona** para llevar en papel a la calle, piso por piso?
-2. ¿Qué columnas?
-3. ¿Puede exportar cualquier asesor, o solo el director, como el Excel?
+**Preguntas al cliente (respondidas el 14/10/2026).**
+1. ¿Qué quieren imprimir: las listas generales, o **la hoja de un bloque o de una zona** para llevar en papel a la calle, piso por piso? **Las dos.** (La hoja de una zona llegará con el punto 3.)
+2. ¿Qué columnas? **Captación, propietario, teléfono, calle, bloque, etiquetas del cliente, último y próximo contacto; en la hoja del bloque, la propuesta completa.**
+3. ¿Puede exportar cualquier asesor, o solo el director, como el Excel? **Cualquier asesor.**
 
 ---
 

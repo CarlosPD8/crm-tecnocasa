@@ -3,7 +3,9 @@ import type { NextRequest } from "next/server";
 
 import { getContextoApi } from "@/lib/db";
 import { resumenPorBloque } from "@/lib/bloques";
-import { consultaBloques, consultaClientes, consultaInmuebles } from "@/lib/filtros/consultas";
+import { consultaActividad, consultaBloques, consultaClientes, consultaInmuebles } from "@/lib/filtros/consultas";
+import type { Cambio } from "@/lib/actividad";
+import { ACCION_LABELS } from "@/lib/validations/actividad";
 import { ordenarEtiquetas, TIPO_CLIENTE_LABELS } from "@/lib/validations/cliente";
 import {
   ESTADO_INMUEBLE_LABELS,
@@ -23,10 +25,10 @@ import {
   texto,
 } from "@/lib/exportar/excel";
 
-type Entidad = "clientes" | "inmuebles" | "bloques";
+type Entidad = "clientes" | "inmuebles" | "bloques" | "actividad";
 
 /**
- * GET handler shared by the three lists: same filters and order as the page
+ * GET handler shared by the lists: same filters and order as the page
  * (read from the query string), scoped to the user's office, director only.
  */
 export async function exportar(request: NextRequest, entidad: Entidad) {
@@ -118,6 +120,34 @@ export async function exportar(request: NextRequest, entidad: Entidad) {
         texto("Alta por", (i) => i.creadoPor?.nombre),
       ],
       "inmuebles"
+    );
+  }
+
+  if (entidad === "actividad") {
+    const { where } = consultaActividad(sp);
+    const error = demasiadas(await db.actividad.count({ where }));
+    if (error) return error;
+    const filas = await db.actividad.findMany({
+      where,
+      orderBy: { fecha: "asc" },
+      include: { creadoPor: { select: { nombre: true } } },
+    });
+    type F = (typeof filas)[number];
+    const cambios = (f: F) =>
+      Array.isArray(f.cambios)
+        ? (f.cambios as Cambio[]).map((c) => `${c.campo}: ${c.antes ?? "—"} → ${c.despues ?? "—"}`).join("; ")
+        : null;
+    return respuestaExcel<F>(
+      filas,
+      [
+        fecha("Fecha y hora", (f) => f.fecha, true),
+        texto("Persona", (f) => f.creadoPor?.nombre),
+        texto("Tipo", (f) => ACCION_LABELS[f.accion], 12),
+        texto("Qué hizo", (f) => f.resumen, 60),
+        texto("Cambios", cambios, 50),
+        texto("Nota", (f) => f.detalle, 50),
+      ],
+      "actividad"
     );
   }
 

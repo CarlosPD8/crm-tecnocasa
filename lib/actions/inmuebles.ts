@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { existe, getContexto, resolverAsesor, SIN_PERMISO, type DbOficina } from "@/lib/db";
+import { cambioInmueble, frase, incluirCambiosInmueble, registrarActividad } from "@/lib/actividad";
 import { inmuebleSchema, type InmuebleInput } from "@/lib/validations/inmueble";
 
 function toNullable(value: string | undefined) {
@@ -90,7 +91,17 @@ export async function crearInmueble(data: InmuebleInput) {
   const asesor = await resolverAsesor(ctx, parsed.data.asesorId);
   if (!asesor.ok) return { success: false as const, error: { asesorId: [asesor.error] } };
 
-  const inmueble = await db.inmueble.create({ data: { ...datos, asesorId: asesor.asesorId } });
+  const inmueble = await db.$transaction(async (tx) => {
+    const creado = await tx.inmueble.create({ data: { ...datos, asesorId: asesor.asesorId } });
+    await registrarActividad(tx, {
+      accion: "ALTA",
+      entidad: "INMUEBLE",
+      entidadId: creado.id,
+      enlace: `/inmuebles/${creado.id}`,
+      resumen: frase.altaInmueble(creado.referencia, creado.direccion),
+    });
+    return creado;
+  });
   await marcarPropietario(db, inmueble.propietarioId);
 
   revalidatePath("/inmuebles");
@@ -106,7 +117,7 @@ export async function actualizarInmueble(id: string, data: InmuebleInput) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
   }
 
-  const anterior = await db.inmueble.findUnique({ where: { id }, select: { bloqueId: true, asesorId: true } });
+  const anterior = await db.inmueble.findUnique({ where: { id }, include: incluirCambiosInmueble });
   if (!anterior) return { success: false as const, error: { _: ["Este inmueble ya no existe."] } };
 
   const datos = buildData(parsed.data);
@@ -115,7 +126,16 @@ export async function actualizarInmueble(id: string, data: InmuebleInput) {
   const asesor = await resolverAsesor(ctx, parsed.data.asesorId, anterior.asesorId);
   if (!asesor.ok) return { success: false as const, error: { asesorId: [asesor.error] } };
 
-  const actualizado = await db.inmueble.update({ where: { id }, data: { ...datos, asesorId: asesor.asesorId } });
+  const actualizado = await db.$transaction(async (tx) => {
+    const nuevo = await tx.inmueble.update({
+      where: { id },
+      data: { ...datos, asesorId: asesor.asesorId },
+      include: incluirCambiosInmueble,
+    });
+    const cambio = cambioInmueble(anterior, nuevo);
+    if (cambio) await registrarActividad(tx, cambio);
+    return nuevo;
+  });
   await marcarPropietario(db, actualizado.propietarioId);
 
   revalidatePath("/inmuebles");
@@ -132,7 +152,7 @@ export async function eliminarInmueble(id: string) {
 
   const inmueble = await db.inmueble.findUnique({
     where: { id },
-    select: { bloqueId: true, _count: { select: { operaciones: true } } },
+    select: { referencia: true, direccion: true, bloqueId: true, _count: { select: { operaciones: true } } },
   });
   if (!inmueble) return { success: false as const, error: "Este inmueble ya no existe." };
 
@@ -143,7 +163,17 @@ export async function eliminarInmueble(id: string) {
     };
   }
 
-  await db.inmueble.deleteMany({ where: { id } });
+  await db.$transaction(async (tx) => {
+    const { count } = await tx.inmueble.deleteMany({ where: { id } });
+    if (count) {
+      await registrarActividad(tx, {
+        accion: "BAJA",
+        entidad: "INMUEBLE",
+        entidadId: id,
+        resumen: `Borró ${inmueble.referencia} · ${inmueble.direccion}`,
+      });
+    }
+  });
   revalidatePath("/inmuebles");
   revalidarBloque(inmueble.bloqueId);
   return { success: true as const };

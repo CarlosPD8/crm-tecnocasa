@@ -58,6 +58,7 @@ export type DefinicionFiltros = {
 export const PRESETS_FECHA = {
   vencido: "Vencido u hoy",
   hoy: "Hoy",
+  ayer: "Ayer",
   proximos7: "Próximos 7 días",
   proximos30: "Próximos 30 días",
   proximos90: "Próximos 90 días",
@@ -126,6 +127,8 @@ export function leerFecha(valor: string | undefined, ahora = new Date()): RangoF
         return { hasta: hoy };
       case "hoy":
         return { desde: hoy, hasta: hoy };
+      case "ayer":
+        return { desde: sumarDias(hoy, -1), hasta: sumarDias(hoy, -1) };
       case "proximos7":
         return { desde: hoy, hasta: sumarDias(hoy, 7) };
       case "proximos30":

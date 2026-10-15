@@ -90,7 +90,7 @@ export async function respuestaExcel<T>(filas: T[], columnas: Column<T>[], nombr
   });
 }
 
-export function respuestaError(estado: 401 | 403 | 413, mensaje: string) {
+export function respuestaError(estado: 401 | 403 | 404 | 413, mensaje: string) {
   return new Response(mensaje, {
     status: estado,
     headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },

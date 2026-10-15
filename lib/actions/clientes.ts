@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getContexto, resolverAsesor, SIN_PERMISO, type DbOficina } from "@/lib/db";
+import { cambioCliente, frase, incluirCambiosCliente, registrarActividad } from "@/lib/actividad";
 import { clienteSchema, normalizarDni, ordenarEtiquetas, type ClienteInput } from "@/lib/validations/cliente";
 
 function toNullable(value: string | undefined) {
@@ -54,8 +55,18 @@ export async function crearCliente(data: ClienteInput) {
   const asesor = await resolverAsesor(ctx, parsed.data.asesorId);
   if (!asesor.ok) return { success: false as const, error: { asesorId: [asesor.error] } };
 
-  const cliente = await db.cliente.create({
-    data: { ...datosCliente(parsed.data, dni.dni), asesorId: asesor.asesorId },
+  const cliente = await db.$transaction(async (tx) => {
+    const creado = await tx.cliente.create({
+      data: { ...datosCliente(parsed.data, dni.dni), asesorId: asesor.asesorId },
+    });
+    await registrarActividad(tx, {
+      accion: "ALTA",
+      entidad: "CLIENTE",
+      entidadId: creado.id,
+      enlace: `/clientes/${creado.id}`,
+      resumen: frase.altaCliente(`${creado.nombre} ${creado.apellidos}`),
+    });
+    return creado;
   });
 
   revalidatePath("/clientes");
@@ -72,17 +83,23 @@ export async function actualizarCliente(id: string, data: ClienteInput) {
   const dni = await comprobarDni(db, parsed.data.dni, id);
   if (!dni.ok) return { success: false as const, error: { dni: [dni.mensaje] } };
 
-  const actual = await db.cliente.findUnique({ where: { id }, select: { asesorId: true } });
+  const actual = await db.cliente.findUnique({ where: { id }, include: incluirCambiosCliente });
   if (!actual) return NO_ENCONTRADO;
   const asesor = await resolverAsesor(ctx, parsed.data.asesorId, actual.asesorId);
   if (!asesor.ok) return { success: false as const, error: { asesorId: [asesor.error] } };
 
-  const { count } = await db.cliente.updateMany({
-    where: { id },
-    data: { ...datosCliente(parsed.data, dni.dni), asesorId: asesor.asesorId },
+  const cliente = await db.$transaction(async (tx) => {
+    const { count } = await tx.cliente.updateMany({
+      where: { id },
+      data: { ...datosCliente(parsed.data, dni.dni), asesorId: asesor.asesorId },
+    });
+    if (!count) return null;
+    const nuevo = await tx.cliente.findUniqueOrThrow({ where: { id }, include: incluirCambiosCliente });
+    const cambio = cambioCliente(actual, nuevo);
+    if (cambio) await registrarActividad(tx, cambio);
+    return nuevo;
   });
-  if (!count) return NO_ENCONTRADO;
-  const cliente = await db.cliente.findUniqueOrThrow({ where: { id } });
+  if (!cliente) return NO_ENCONTRADO;
 
   revalidatePath("/clientes");
   revalidatePath(`/clientes/${id}`);
@@ -95,7 +112,7 @@ export async function eliminarCliente(id: string) {
 
   const cliente = await db.cliente.findUnique({
     where: { id },
-    select: { _count: { select: { operaciones: true, inmueblesEnPropiedad: true } } },
+    select: { nombre: true, apellidos: true, _count: { select: { operaciones: true, inmueblesEnPropiedad: true } } },
   });
   if (!cliente) return { success: false as const, error: "Este cliente ya no existe." };
 
@@ -106,7 +123,17 @@ export async function eliminarCliente(id: string) {
     };
   }
 
-  await db.cliente.deleteMany({ where: { id } });
+  await db.$transaction(async (tx) => {
+    const { count } = await tx.cliente.deleteMany({ where: { id } });
+    if (count) {
+      await registrarActividad(tx, {
+        accion: "BAJA",
+        entidad: "CLIENTE",
+        entidadId: id,
+        resumen: `Borró a ${cliente.nombre} ${cliente.apellidos}`,
+      });
+    }
+  });
   revalidatePath("/clientes");
   return { success: true as const };
 }

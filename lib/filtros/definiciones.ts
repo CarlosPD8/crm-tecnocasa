@@ -1,4 +1,5 @@
 import type { DefinicionFiltros } from "@/lib/filtros/tipos";
+import { ACCION_LABELS } from "@/lib/validations/actividad";
 import { TIPO_CLIENTE_LABELS } from "@/lib/validations/cliente";
 import {
   CAPTACION_LABELS,
@@ -123,10 +124,27 @@ export const FILTROS_BLOQUES = {
   },
 } as const satisfies DefinicionFiltros;
 
+// Without a date filter the screen shows the last 7 days (see consultaActividad).
+export const FILTROS_ACTIVIDAD = {
+  campos: [
+    {
+      clave: "fecha",
+      etiqueta: "Fechas",
+      grupo: "Cuándo",
+      tipo: "fecha",
+      presets: ["hoy", "ayer", "ultimos7", "ultimos30", "esteMes"],
+    },
+    { clave: "persona", etiqueta: "Persona", grupo: "Quién y qué", tipo: "multi", opciones: "dinamico" },
+    { clave: "tipo", etiqueta: "Tipo", grupo: "Quién y qué", tipo: "multi", opciones: ACCION_LABELS },
+  ],
+  orden: { recientes: "Días más recientes primero" },
+} as const satisfies DefinicionFiltros;
+
 export const DEFINICIONES = {
   clientes: FILTROS_CLIENTES,
   inmuebles: FILTROS_INMUEBLES,
   bloques: FILTROS_BLOQUES,
+  actividad: FILTROS_ACTIVIDAD,
 } satisfies Record<string, DefinicionFiltros>;
 
 export type EntidadFiltrable = keyof typeof DEFINICIONES;

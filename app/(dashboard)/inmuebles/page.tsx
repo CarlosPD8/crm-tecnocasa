@@ -59,6 +59,7 @@ export default async function InmueblesPage({
         <BarraFiltros
           entidad="inmuebles"
           exportar={esDirector ? { total: total } : undefined}
+          pdf={{ total }}
           ariaBusqueda="Buscar inmuebles"
           placeholder="Referencia, dirección, bloque, propietario…"
           opciones={{

@@ -62,6 +62,7 @@ export default async function ClientesPage({
         <BarraFiltros
           entidad="clientes"
           exportar={esDirector ? { total: total } : undefined}
+          pdf={{ total }}
           opciones={{ asesor: opcionesFiltroAsesor(asesores) }}
           ariaBusqueda="Buscar clientes"
           placeholder="Nombre, teléfono, email o DNI…"

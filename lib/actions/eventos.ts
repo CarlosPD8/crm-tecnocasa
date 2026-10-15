@@ -14,6 +14,7 @@ import {
 } from "@/lib/validations/evento";
 import { TIPO_OPERACION_LABELS } from "@/lib/validations/inmueble";
 import type { Prisma } from "@/lib/generated/prisma/client";
+import { cambioEvento, cuandoEvento, fechaCorta, frase, registrarActividad } from "@/lib/actividad";
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 
@@ -200,7 +201,17 @@ export async function crearEvento(data: EventoInput) {
   }
   const enlaces = await comprobarEnlaces(db, parsed.data);
   if (enlaces) return { success: false as const, error: enlaces };
-  const evento = await db.evento.create({ data: datosEvento(parsed.data), include: incluirEnlaces });
+  const evento = await db.$transaction(async (tx) => {
+    const creado = await tx.evento.create({ data: datosEvento(parsed.data), include: incluirEnlaces });
+    await registrarActividad(tx, {
+      accion: "ALTA",
+      entidad: "EVENTO",
+      entidadId: creado.id,
+      enlace: "/calendario",
+      resumen: frase.cita(creado.titulo, cuandoEvento(creado)),
+    });
+    return creado;
+  });
   return { success: true as const, evento: eventoAItem(evento, ctx) };
 }
 
@@ -213,13 +224,19 @@ export async function actualizarEvento(id: string, data: EventoInput) {
   }
   const enlaces = await comprobarEnlaces(db, parsed.data);
   if (enlaces) return { success: false as const, error: enlaces };
-  if (!(await existe(db, "evento", id))) {
+  const anterior = await db.evento.findUnique({ where: { id }, include: incluirEnlaces });
+  if (!anterior) {
     return { success: false as const, error: { titulo: ["Este evento ya no existe."] } };
   }
-  const evento = await db.evento.update({
-    where: { id },
-    data: datosEvento(parsed.data),
-    include: incluirEnlaces,
+  const evento = await db.$transaction(async (tx) => {
+    const nuevo = await tx.evento.update({
+      where: { id },
+      data: datosEvento(parsed.data),
+      include: incluirEnlaces,
+    });
+    const cambio = cambioEvento(anterior, nuevo);
+    if (cambio) await registrarActividad(tx, cambio);
+    return nuevo;
   });
   return { success: true as const, evento: eventoAItem(evento, ctx) };
 }
@@ -232,22 +249,60 @@ export async function moverEvento(id: string, data: MoverEventoInput) {
     return { success: false as const, error: "Esas fechas no son válidas." };
   }
   const { todoElDia, inicio, fin } = parsed.data;
-  const { count } = await db.evento.updateMany({
-    where: { id },
-    data: { todoElDia, inicio: aFecha(inicio, todoElDia), fin: aFecha(fin, todoElDia) },
-  });
-  if (!count) return { success: false as const, error: "Este evento ya no existe." };
+  const datos = { todoElDia, inicio: aFecha(inicio, todoElDia), fin: aFecha(fin, todoElDia) };
+  const anterior = await db.evento.findUnique({ where: { id }, select: { titulo: true, inicio: true, todoElDia: true } });
+  const movido =
+    anterior &&
+    (await db.$transaction(async (tx) => {
+      const { count } = await tx.evento.updateMany({ where: { id }, data: datos });
+      const [antes, despues] = [cuandoEvento(anterior), cuandoEvento(datos)];
+      if (count && antes !== despues) {
+        await registrarActividad(tx, {
+          accion: "CAMBIO",
+          entidad: "EVENTO",
+          entidadId: id,
+          enlace: "/calendario",
+          resumen: `Movió la cita «${anterior.titulo}» al ${despues}`,
+          cambios: [{ campo: "Fecha", antes, despues }],
+        });
+      }
+      return count > 0;
+    }));
+  if (!movido) return { success: false as const, error: "Este evento ya no existe." };
   return { success: true as const };
 }
 
 /** Directors delete any event; advisors only the ones they created. */
 export async function eliminarEvento(id: string) {
   const { db, usuario, esDirector } = await getContexto();
-  const evento = await db.evento.findUnique({ where: { id }, select: { creadoPorId: true } });
+  const evento = await db.evento.findUnique({ where: { id }, select: { creadoPorId: true, titulo: true } });
   if (!evento) return { success: false as const, error: "Este evento ya no existe." };
   if (!esDirector && evento.creadoPorId !== usuario.id) return SIN_PERMISO;
-  await db.evento.deleteMany({ where: { id } });
+  await db.$transaction(async (tx) => {
+    const { count } = await tx.evento.deleteMany({ where: { id } });
+    if (count) {
+      await registrarActividad(tx, {
+        accion: "BAJA",
+        entidad: "EVENTO",
+        entidadId: id,
+        resumen: `Borró la cita «${evento.titulo}»`,
+      });
+    }
+  });
   return { success: true as const };
+}
+
+/** Name and current follow-up of a client or property, for the activity log. */
+async function seguimientoActual(db: DbOficina, de: "cliente" | "inmueble", id: string) {
+  if (de === "inmueble") {
+    const i = await db.inmueble.findUnique({ where: { id }, select: { referencia: true, fechaProximoContacto: true } });
+    return i && { nombre: i.referencia, fecha: i.fechaProximoContacto };
+  }
+  const c = await db.cliente.findUnique({
+    where: { id },
+    select: { nombre: true, apellidos: true, fechaProximoContacto: true },
+  });
+  return c && { nombre: `${c.nombre} ${c.apellidos}`, fecha: c.fechaProximoContacto };
 }
 
 /** Dragging a follow-up in the calendar reschedules the client's or the property's next contact. */
@@ -257,14 +312,36 @@ export async function moverProximoContacto(id: string, dia: string, de: "cliente
     return { success: false as const, error: "Fecha no válida." };
   }
   const data = { fechaProximoContacto: aFecha(dia, true) };
-  const { count } =
-    de === "inmueble"
-      ? await db.inmueble.updateMany({ where: { id }, data })
-      : await db.cliente.updateMany({ where: { id }, data });
+  const anterior = await seguimientoActual(db, de, id);
+  const lista = de === "inmueble" ? "/inmuebles" : "/clientes";
+
+  const count = !anterior
+    ? 0
+    : await db.$transaction(async (tx) => {
+        const { count } =
+          de === "inmueble"
+            ? await tx.inmueble.updateMany({ where: { id }, data })
+            : await tx.cliente.updateMany({ where: { id }, data });
+        const cambio = {
+          campo: "Próximo contacto",
+          antes: fechaCorta(anterior.fecha),
+          despues: fechaCorta(data.fechaProximoContacto),
+        };
+        if (count && cambio.antes !== cambio.despues) {
+          await registrarActividad(tx, {
+            accion: "CAMBIO",
+            entidad: de === "inmueble" ? "INMUEBLE" : "CLIENTE",
+            entidadId: id,
+            enlace: `${lista}/${id}`,
+            resumen: frase.cambio(anterior.nombre, [{ ...cambio, articulo: "el" }]),
+            cambios: [cambio],
+          });
+        }
+        return count;
+      });
   if (!count) {
     return { success: false as const, error: de === "inmueble" ? "Este inmueble ya no existe." : "Este cliente ya no existe." };
   }
-  const lista = de === "inmueble" ? "/inmuebles" : "/clientes";
   revalidatePath("/");
   revalidatePath(lista);
   revalidatePath(`${lista}/${id}`);

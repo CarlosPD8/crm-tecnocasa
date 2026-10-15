@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { getContexto, SIN_PERMISO, type DbOficina } from "@/lib/db";
-import { bloqueSchema, type BloqueInput } from "@/lib/validations/bloque";
+import { bloqueSchema, formatBloque, type BloqueInput } from "@/lib/validations/bloque";
+import { cambioBloque, frase, registrarActividad } from "@/lib/actividad";
 
 function toNullable(value: string | undefined) {
   return value && value.trim() !== "" ? value.trim() : null;
@@ -45,7 +46,17 @@ export async function crearBloque(data: BloqueInput) {
   }
   if (await existeOtro(db, parsed.data)) return DUPLICADO;
 
-  const bloque = await db.bloque.create({ data: buildData(parsed.data) });
+  const bloque = await db.$transaction(async (tx) => {
+    const creado = await tx.bloque.create({ data: buildData(parsed.data) });
+    await registrarActividad(tx, {
+      accion: "ALTA",
+      entidad: "BLOQUE",
+      entidadId: creado.id,
+      enlace: `/bloques/${creado.id}`,
+      resumen: frase.altaBloque(formatBloque(creado)),
+    });
+    return creado;
+  });
 
   revalidatePath("/bloques");
   return {
@@ -67,8 +78,17 @@ export async function actualizarBloque(id: string, data: BloqueInput) {
   }
   if (await existeOtro(db, parsed.data, id)) return DUPLICADO;
 
-  const { count } = await db.bloque.updateMany({ where: { id }, data: buildData(parsed.data) });
-  if (!count) return { success: false as const, error: { _: ["Este bloque ya no existe."] } };
+  const anterior = await db.bloque.findUnique({ where: { id } });
+  const actualizado =
+    anterior &&
+    (await db.$transaction(async (tx) => {
+      const { count } = await tx.bloque.updateMany({ where: { id }, data: buildData(parsed.data) });
+      if (!count) return false;
+      const cambio = cambioBloque(anterior, await tx.bloque.findUniqueOrThrow({ where: { id } }));
+      if (cambio) await registrarActividad(tx, cambio);
+      return true;
+    }));
+  if (!actualizado) return { success: false as const, error: { _: ["Este bloque ya no existe."] } };
 
   revalidatePath("/bloques");
   revalidatePath(`/bloques/${id}`);
@@ -90,8 +110,22 @@ export async function eliminarBloque(id: string) {
     };
   }
 
-  const { count } = await db.bloque.deleteMany({ where: { id } });
-  if (!count) return { success: false as const, error: "Este bloque ya no existe." };
+  const bloque = await db.bloque.findUnique({ where: { id }, select: { calle: true, numero: true } });
+  const borrado =
+    bloque &&
+    (await db.$transaction(async (tx) => {
+      const { count } = await tx.bloque.deleteMany({ where: { id } });
+      if (count) {
+        await registrarActividad(tx, {
+          accion: "BAJA",
+          entidad: "BLOQUE",
+          entidadId: id,
+          resumen: `Borró el bloque ${formatBloque(bloque)}`,
+        });
+      }
+      return count > 0;
+    }));
+  if (!borrado) return { success: false as const, error: "Este bloque ya no existe." };
   revalidatePath("/bloques");
   return { success: true as const };
 }

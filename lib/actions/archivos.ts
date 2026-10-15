@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { existe, getContexto, SIN_PERMISO } from "@/lib/db";
+import { getContexto, SIN_PERMISO } from "@/lib/db";
+import { frase, registrarActividad } from "@/lib/actividad";
 import {
   subirArchivoStorage,
   eliminarArchivoStorage,
@@ -29,7 +30,8 @@ export async function subirArchivoCliente(clienteId: string, formData: FormData)
   if (errorFile || !(file instanceof File)) {
     return { success: false as const, error: errorFile ?? "Selecciona un archivo." };
   }
-  if (!(await existe(db, "cliente", clienteId))) {
+  const cliente = await db.cliente.findUnique({ where: { id: clienteId }, select: { nombre: true, apellidos: true } });
+  if (!cliente) {
     return { success: false as const, error: "Este cliente ya no existe." };
   }
 
@@ -42,16 +44,25 @@ export async function subirArchivoCliente(clienteId: string, formData: FormData)
   }
 
   try {
-    await db.archivo.create({
-      data: {
-        categoria: "DOCUMENTO",
-        clienteId,
-        bucket: BUCKET_DOCUMENTOS,
-        path,
-        nombreOriginal: file.name,
-        tamanioBytes: file.size,
-        mimeType: file.type || "application/octet-stream",
-      },
+    await db.$transaction(async (tx) => {
+      const archivo = await tx.archivo.create({
+        data: {
+          categoria: "DOCUMENTO",
+          clienteId,
+          bucket: BUCKET_DOCUMENTOS,
+          path,
+          nombreOriginal: file.name,
+          tamanioBytes: file.size,
+          mimeType: file.type || "application/octet-stream",
+        },
+      });
+      await registrarActividad(tx, {
+        accion: "ALTA",
+        entidad: "ARCHIVO",
+        entidadId: archivo.id,
+        enlace: `/clientes/${clienteId}`,
+        resumen: frase.archivo("DOCUMENTO", file.name, `${cliente.nombre} ${cliente.apellidos}`),
+      });
     });
   } catch {
     await eliminarArchivoStorage(BUCKET_DOCUMENTOS, path);
@@ -74,7 +85,8 @@ export async function subirArchivoInmueble(
   if (errorFile || !(file instanceof File)) {
     return { success: false as const, error: errorFile ?? "Selecciona un archivo." };
   }
-  if (!(await existe(db, "inmueble", inmuebleId))) {
+  const inmueble = await db.inmueble.findUnique({ where: { id: inmuebleId }, select: { referencia: true } });
+  if (!inmueble) {
     return { success: false as const, error: "Este inmueble ya no existe." };
   }
 
@@ -88,23 +100,32 @@ export async function subirArchivoInmueble(
   }
 
   try {
-    const { _max } = await db.archivo.aggregate({
-      where: { inmuebleId, categoria },
-      _max: { orden: true },
-    });
+    await db.$transaction(async (tx) => {
+      const { _max } = await tx.archivo.aggregate({
+        where: { inmuebleId, categoria },
+        _max: { orden: true },
+      });
 
-    await db.archivo.create({
-      data: {
-        categoria,
-        inmuebleId,
-        bucket,
-        path,
-        url: categoria === "FOTO" ? getUrlPublicaFoto(path) : null,
-        nombreOriginal: file.name,
-        tamanioBytes: file.size,
-        mimeType: file.type || "application/octet-stream",
-        orden: (_max.orden ?? -1) + 1,
-      },
+      const archivo = await tx.archivo.create({
+        data: {
+          categoria,
+          inmuebleId,
+          bucket,
+          path,
+          url: categoria === "FOTO" ? getUrlPublicaFoto(path) : null,
+          nombreOriginal: file.name,
+          tamanioBytes: file.size,
+          mimeType: file.type || "application/octet-stream",
+          orden: (_max.orden ?? -1) + 1,
+        },
+      });
+      await registrarActividad(tx, {
+        accion: "ALTA",
+        entidad: "ARCHIVO",
+        entidadId: archivo.id,
+        enlace: `/inmuebles/${inmuebleId}`,
+        resumen: frase.archivo(categoria, file.name, inmueble.referencia),
+      });
     });
   } catch {
     await eliminarArchivoStorage(bucket, path);
@@ -121,18 +142,38 @@ export async function eliminarArchivo(archivoId: string) {
 
   const archivo = await db.archivo.findUnique({
     where: { id: archivoId },
+    include: {
+      cliente: { select: { nombre: true, apellidos: true } },
+      inmueble: { select: { referencia: true } },
+    },
   });
   if (!archivo) return { success: false as const, error: "Este archivo ya no existe." };
   if (!esDirector && archivo.creadoPorId !== usuario.id) return SIN_PERMISO;
 
   await eliminarArchivoStorage(archivo.bucket, archivo.path);
-  await db.archivo.deleteMany({ where: { id: archivoId } });
+  const de = archivo.inmueble?.referencia ?? (archivo.cliente ? `${archivo.cliente.nombre} ${archivo.cliente.apellidos}` : "");
+  await db.$transaction(async (tx) => {
+    const { count } = await tx.archivo.deleteMany({ where: { id: archivoId } });
+    if (count) {
+      await registrarActividad(tx, {
+        accion: "BAJA",
+        entidad: "ARCHIVO",
+        entidadId: archivoId,
+        enlace: archivo.inmuebleId ? `/inmuebles/${archivo.inmuebleId}` : `/clientes/${archivo.clienteId}`,
+        resumen:
+          archivo.categoria === "FOTO"
+            ? `Borró una foto de ${de}`
+            : `Borró el documento «${archivo.nombreOriginal}» de ${de}`,
+      });
+    }
+  });
 
   if (archivo.clienteId) revalidatePath(`/clientes/${archivo.clienteId}`);
   if (archivo.inmuebleId) revalidatePath(`/inmuebles/${archivo.inmuebleId}`);
   return { success: true as const };
 }
 
+/** Not logged: reordering photos tells a director nothing about the work done. */
 export async function moverFoto(archivoId: string, direccion: "arriba" | "abajo") {
   const { db } = await getContexto();
 

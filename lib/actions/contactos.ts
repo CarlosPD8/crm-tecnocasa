@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { existe, getContexto } from "@/lib/db";
+import { getContexto } from "@/lib/db";
+import { frase, registrarActividad } from "@/lib/actividad";
 import {
   contactoInmuebleSchema,
   contactoSchema,
@@ -16,21 +17,35 @@ export async function crearContacto(clienteId: string, data: ContactoInput) {
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
   }
-  if (!(await existe(db, "cliente", clienteId))) {
+  const cliente = await db.cliente.findUnique({ where: { id: clienteId }, select: { nombre: true, apellidos: true } });
+  if (!cliente) {
     return { success: false as const, error: { nota: ["Este cliente ya no existe."] } };
   }
 
   const ahora = new Date();
+  const proximo = proximoContactoData(parsed.data.fechaProximoContacto);
 
-  await db.$transaction([
-    db.contacto.create({
+  await db.$transaction(async (tx) => {
+    const contacto = await tx.contacto.create({
       data: { clienteId, nota: parsed.data.nota, fecha: ahora },
-    }),
-    db.cliente.update({
+    });
+    await tx.cliente.update({
       where: { id: clienteId },
-      data: { fechaUltimoContacto: ahora, ...proximoContactoData(parsed.data.fechaProximoContacto) },
-    }),
-  ]);
+      data: { fechaUltimoContacto: ahora, ...proximo },
+    });
+    await registrarActividad(
+      tx,
+      {
+        accion: "CONTACTO",
+        entidad: "CONTACTO",
+        entidadId: contacto.id,
+        enlace: `/clientes/${clienteId}`,
+        resumen: frase.contacto(`${cliente.nombre} ${cliente.apellidos}`, null, proximo.fechaProximoContacto),
+        detalle: parsed.data.nota,
+      },
+      ahora
+    );
+  });
 
   revalidatePath(`/clientes/${clienteId}`);
   revalidatePath("/clientes");
@@ -51,24 +66,45 @@ export async function crearContactoInmueble(inmuebleId: string, data: ContactoIn
   }
 
   const clienteId = parsed.data.clienteId || null;
-  if (!(await existe(db, "inmueble", inmuebleId))) {
+  const datosInmueble = await db.inmueble.findUnique({ where: { id: inmuebleId }, select: { referencia: true } });
+  if (!datosInmueble) {
     return { success: false as const, error: { nota: ["Este inmueble ya no existe."] } };
   }
-  if (clienteId && !(await existe(db, "cliente", clienteId))) {
+  const cliente = clienteId
+    ? await db.cliente.findUnique({ where: { id: clienteId }, select: { nombre: true, apellidos: true } })
+    : null;
+  if (clienteId && !cliente) {
     return { success: false as const, error: { clienteId: ["Ese cliente ya no existe."] } };
   }
   const ahora = new Date();
+  const proximo = proximoContactoData(parsed.data.fechaProximoContacto);
 
   const inmueble = await db.$transaction(async (tx) => {
-    await tx.contacto.create({
+    const contacto = await tx.contacto.create({
       data: { inmuebleId, clienteId, nota: parsed.data.nota, fecha: ahora },
     });
     if (clienteId) {
       await tx.cliente.update({ where: { id: clienteId }, data: { fechaUltimoContacto: ahora } });
     }
+    await registrarActividad(
+      tx,
+      {
+        accion: "CONTACTO",
+        entidad: "CONTACTO",
+        entidadId: contacto.id,
+        enlace: `/inmuebles/${inmuebleId}`,
+        resumen: frase.contacto(
+          cliente ? `${cliente.nombre} ${cliente.apellidos}` : null,
+          datosInmueble.referencia,
+          proximo.fechaProximoContacto
+        ),
+        detalle: parsed.data.nota,
+      },
+      ahora
+    );
     return tx.inmueble.update({
       where: { id: inmuebleId },
-      data: { fechaUltimoContacto: ahora, ...proximoContactoData(parsed.data.fechaProximoContacto) },
+      data: { fechaUltimoContacto: ahora, ...proximo },
       select: { bloqueId: true },
     });
   });

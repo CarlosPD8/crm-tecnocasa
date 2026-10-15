@@ -8,6 +8,7 @@ import { Prisma } from "@/lib/generated/prisma/client";
  * - Creates get `oficinaId` and, where the model has it, `creadoPorId`.
  * - Only the operations listed here are allowed; raw SQL and anything unknown
  *   throws, so a new Prisma operation can't silently bypass the scope.
+ * - The activity log (Actividad) is append-only: create and read, nothing else.
  * - Nested writes (`connect`, `create`… under a relation) are rejected: they
  *   would skip this extension. Link rows with scalar ids instead; the database
  *   triggers `crm_misma_oficina` reject ids of another office.
@@ -32,12 +33,13 @@ type Relaciones<Include> = Record<Exclude<keyof Include, "_count">, true>;
 const RELACIONES: Record<Prisma.ModelName, Record<string, true>> = {
   Oficina: {
     usuarios: true, clientes: true, inmuebles: true, bloques: true, contactos: true,
-    eventos: true, intereses: true, operaciones: true, archivos: true,
+    eventos: true, intereses: true, operaciones: true, archivos: true, actividades: true,
   } satisfies Relaciones<Prisma.OficinaInclude>,
   Usuario: {
     oficina: true, clientesCreados: true, clientesAsignados: true, inmueblesCreados: true,
     inmueblesAsignados: true, bloquesCreados: true, contactosCreados: true,
-    eventosCreados: true, operacionesCreadas: true, archivosCreados: true,
+    eventosCreados: true, operacionesCreadas: true, archivosCreados: true, interesesCreados: true,
+    actividades: true,
   } satisfies Relaciones<Prisma.UsuarioInclude>,
   Evento: { oficina: true, cliente: true, inmueble: true, creadoPor: true } satisfies Relaciones<Prisma.EventoInclude>,
   Bloque: { oficina: true, creadoPor: true, inmuebles: true } satisfies Relaciones<Prisma.BloqueInclude>,
@@ -50,16 +52,22 @@ const RELACIONES: Record<Prisma.ModelName, Record<string, true>> = {
     oficina: true, propietario: true, bloque: true, asesor: true, creadoPor: true,
     archivos: true, intereses: true, operaciones: true, contactos: true, eventos: true,
   } satisfies Relaciones<Prisma.InmuebleInclude>,
-  Interes: { oficina: true, cliente: true, inmueble: true } satisfies Relaciones<Prisma.InteresInclude>,
+  Interes: { oficina: true, cliente: true, inmueble: true, creadoPor: true } satisfies Relaciones<Prisma.InteresInclude>,
   Operacion: { oficina: true, cliente: true, inmueble: true, creadoPor: true } satisfies Relaciones<Prisma.OperacionInclude>,
   Archivo: { oficina: true, cliente: true, inmueble: true, creadoPor: true } satisfies Relaciones<Prisma.ArchivoInclude>,
+  Actividad: { oficina: true, creadoPor: true } satisfies Relaciones<Prisma.ActividadInclude>,
 };
 
-const CON_AUTOR = new Set<string>(["Evento", "Bloque", "Cliente", "Contacto", "Inmueble", "Operacion", "Archivo"]);
+const CON_AUTOR = new Set<string>([
+  "Evento", "Bloque", "Cliente", "Contacto", "Inmueble", "Operacion", "Archivo", "Interes", "Actividad",
+]);
 
 const SOLO_WHERE = new Set([
   "findUnique", "findUniqueOrThrow", "findFirst", "findFirstOrThrow", "findMany",
   "count", "aggregate", "groupBy", "delete", "deleteMany",
+]);
+const LECTURA = new Set([
+  "findUnique", "findUniqueOrThrow", "findFirst", "findFirstOrThrow", "findMany", "count", "aggregate", "groupBy",
 ]);
 const ACTUALIZAR = new Set(["update", "updateMany", "updateManyAndReturn"]);
 const CREAR = new Set(["create", "createMany", "createManyAndReturn"]);
@@ -103,6 +111,10 @@ export function extensionOficina(oficinaId: string, usuarioId: string) {
           // AND, not an override: asking for another office's id finds nothing.
           a.where = { id: oficinaId, AND: [a.where ?? {}] };
           return query(a);
+        }
+
+        if (model === "Actividad" && !LECTURA.has(operation) && !CREAR.has(operation)) {
+          throw new ErrorAmbito(`El registro de actividad no se puede modificar (${operation})`);
         }
 
         if (SOLO_WHERE.has(operation)) {

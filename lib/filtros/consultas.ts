@@ -1,6 +1,7 @@
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { condicionFecha, leerBool, leerFecha, leerMulti, leerRango } from "@/lib/filtros/tipos";
 import { FILTROS_BLOQUES, FILTROS_CLIENTES, FILTROS_INMUEBLES, SIN_ASESOR } from "@/lib/filtros/definiciones";
+import { ACCION_LABELS } from "@/lib/validations/actividad";
 import { TIPO_CLIENTE_LABELS, normalizarDni } from "@/lib/validations/cliente";
 import {
   CAPTACION_LABELS,
@@ -260,4 +261,29 @@ export function consultaBloques(sp: SP) {
   }[orden];
 
   return { where: { AND: and } satisfies Prisma.BloqueWhereInput, orderBy };
+}
+
+// ─── Actividad ──────────────────────────────────────────────────────────────
+
+/** Days shown when no date filter is set. */
+export const FECHA_ACTIVIDAD_POR_DEFECTO = "p:ultimos7";
+
+export function consultaActividad(sp: SP, ahora = new Date()) {
+  const and: Prisma.ActividadWhereInput[] = [];
+
+  // Never the whole history at once: the log only grows.
+  const leido = leerFecha(sp.fecha, ahora);
+  const dias = leido && !leido.sin ? leido : leerFecha(FECHA_ACTIVIDAD_POR_DEFECTO, ahora)!;
+  const condicion = condicionFecha(dias);
+  if (condicion) and.push({ dia: condicion });
+
+  const personas = leerMulti(sp.persona);
+  if (personas.length) and.push({ creadoPorId: { in: personas } });
+  const tipos = leerMulti(sp.tipo, claves(ACCION_LABELS));
+  if (tipos.length) and.push({ accion: { in: tipos as (keyof typeof ACCION_LABELS)[] } });
+
+  const q = sp.q?.trim();
+  if (q) and.push({ OR: [{ resumen: contiene(q) }, { detalle: contiene(q) }] });
+
+  return { where: { AND: and } satisfies Prisma.ActividadWhereInput, dias };
 }

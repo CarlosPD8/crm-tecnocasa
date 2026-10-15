@@ -74,6 +74,7 @@ export default async function BloquesPage({
         <BarraFiltros
           entidad="bloques"
           exportar={esDirector ? { total: total } : undefined}
+          pdf={{ total }}
           ariaBusqueda="Buscar bloques"
           placeholder="Calle, número, nombre o localidad…"
           opciones={{ localidad: Object.fromEntries(localidades.map((l) => [l.localidad, l.localidad])) }}

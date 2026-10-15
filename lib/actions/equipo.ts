@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 
 import { getContexto, SIN_PERMISO, type Contexto, type DbOficina } from "@/lib/db";
 import { crearClienteAdmin } from "@/lib/supabase/admin";
+import { frase, registrarActividad } from "@/lib/actividad";
 import {
   editarUsuarioSchema,
   nuevoUsuarioSchema,
   passwordTemporalSchema,
+  ROL_LABELS,
   type EditarUsuarioInput,
   type NuevoUsuarioInput,
 } from "@/lib/validations/usuario";
@@ -67,8 +69,17 @@ export async function crearUsuario(data: NuevoUsuarioInput) {
   }
 
   try {
-    await ctx.db.usuario.create({
-      data: { id: creado.user.id, nombre, email, rol, debeCambiarPassword: true },
+    await ctx.db.$transaction(async (tx) => {
+      await tx.usuario.create({
+        data: { id: creado.user.id, nombre, email, rol, debeCambiarPassword: true },
+      });
+      await registrarActividad(tx, {
+        accion: "ALTA",
+        entidad: "USUARIO",
+        entidadId: creado.user.id,
+        enlace: "/equipo",
+        resumen: `Dio de alta a ${nombre} en el equipo (${ROL_LABELS[rol]})`,
+      });
     });
   } catch {
     // Don't leave an Auth account without a profile (it could never sign in).
@@ -91,8 +102,25 @@ export async function editarUsuario(id: string, data: EditarUsuarioInput) {
 
   try {
     const count = await ctx.db.$transaction(async (tx) => {
+      const antes = await tx.usuario.findUnique({ where: { id }, select: { nombre: true, rol: true } });
       const { count } = await tx.usuario.updateMany({ where: { id }, data: parsed.data });
       await exigirDirectorActivo(tx);
+      if (antes && count) {
+        const cambios = [
+          { campo: "Nombre", articulo: "el", antes: antes.nombre, despues: parsed.data.nombre },
+          { campo: "Rol", articulo: "el", antes: ROL_LABELS[antes.rol], despues: ROL_LABELS[parsed.data.rol] },
+        ].filter((c) => c.antes !== c.despues);
+        if (cambios.length) {
+          await registrarActividad(tx, {
+            accion: "CAMBIO",
+            entidad: "USUARIO",
+            entidadId: id,
+            enlace: "/equipo",
+            resumen: frase.cambio(antes.nombre, cambios),
+            cambios: cambios.map(({ campo, antes, despues }) => ({ campo, antes, despues })),
+          });
+        }
+      }
       return count;
     });
     if (!count) return { success: false as const, error: { _: ["Esa persona ya no está en la oficina."] } as Errores };
@@ -115,8 +143,18 @@ export async function cambiarActivo(id: string, activo: boolean) {
 
   try {
     const count = await ctx.db.$transaction(async (tx) => {
+      const persona = await tx.usuario.findUnique({ where: { id }, select: { nombre: true, activo: true } });
       const { count } = await tx.usuario.updateMany({ where: { id }, data: { activo } });
       await exigirDirectorActivo(tx);
+      if (persona && count && persona.activo !== activo) {
+        await registrarActividad(tx, {
+          accion: "CAMBIO",
+          entidad: "USUARIO",
+          entidadId: id,
+          enlace: "/equipo",
+          resumen: `${activo ? "Reactivó" : "Desactivó"} el acceso de ${persona.nombre}`,
+        });
+      }
       return count;
     });
     if (!count) return { success: false as const, error: "Esa persona ya no está en la oficina." };
@@ -153,7 +191,7 @@ export async function restablecerPassword(id: string, password: string) {
   const parsed = passwordTemporalSchema.safeParse(password);
   if (!parsed.success) return { success: false as const, error: parsed.error.issues[0].message };
 
-  const usuario = await ctx.db.usuario.findUnique({ where: { id }, select: { email: true } });
+  const usuario = await ctx.db.usuario.findUnique({ where: { id }, select: { email: true, nombre: true } });
   if (!usuario) return { success: false as const, error: "Esa persona ya no está en la oficina." };
 
   const { error } = await crearClienteAdmin().auth.admin.updateUserById(id, { password: parsed.data });
@@ -166,7 +204,16 @@ export async function restablecerPassword(id: string, password: string) {
           : "No se pudo cambiar la contraseña. Inténtalo de nuevo.",
     };
   }
-  await ctx.db.usuario.updateMany({ where: { id }, data: { debeCambiarPassword: true } });
+  await ctx.db.$transaction(async (tx) => {
+    await tx.usuario.updateMany({ where: { id }, data: { debeCambiarPassword: true } });
+    await registrarActividad(tx, {
+      accion: "CAMBIO",
+      entidad: "USUARIO",
+      entidadId: id,
+      enlace: "/equipo",
+      resumen: `Restableció la contraseña de ${usuario.nombre}`,
+    });
+  });
 
   revalidatePath("/equipo");
   return { success: true as const, email: usuario.email, password: parsed.data };
