@@ -26,6 +26,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { EstadoBadge } from "@/components/inmuebles/estado-badge";
 import { CaptacionBadge, OcupacionBadge, UltimoContacto } from "@/components/inmuebles/situacion";
 import { EliminarBloqueDialog } from "@/components/bloques/eliminar-bloque-dialog";
+import { ZonaBadge } from "@/components/zonas/zona-badge";
 import { ENLACE_FILA } from "@/components/shared/row-link";
 import { FilaEnlace } from "@/components/shared/fila-enlace";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,7 @@ export default async function BloqueDetallePage({ params }: { params: Promise<{ 
   const bloque = await db.bloque.findUnique({
     where: { id },
     include: {
+      zona: { select: { nombre: true, color: true } },
       inmuebles: {
         // Top-down reading of the building: staircase, then floor, then door.
         orderBy: [
@@ -67,7 +69,12 @@ export default async function BloqueDetallePage({ params }: { params: Promise<{ 
     <div className="flex flex-col gap-8">
       <PageHeader
         back={{ href: "/bloques", label: "Bloques" }}
-        eyebrow="Bloque"
+        eyebrow={
+          <span className="flex flex-wrap items-center gap-2">
+            Bloque
+            <ZonaBadge zona={bloque.zona} className="tracking-normal normal-case" />
+          </span>
+        }
         title={direccion}
         description={detalles}
         actions={

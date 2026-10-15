@@ -30,6 +30,7 @@ const ALTAS: Partial<Record<EntidadActividad, [string, string]>> = {
   ARCHIVO: ["archivo", "archivos"],
   INTERES: ["interesado", "interesados"],
   USUARIO: ["alta en el equipo", "altas en el equipo"],
+  ZONA: ["zona nueva", "zonas nuevas"],
 };
 
 /** «12 contactos · 2 inmuebles nuevos · 3 cambios»: what a director scans first. */

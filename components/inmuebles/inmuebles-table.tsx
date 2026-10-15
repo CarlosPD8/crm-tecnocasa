@@ -22,10 +22,12 @@ import {
 } from "@/lib/validations/inmueble";
 import { formatBloque } from "@/lib/validations/bloque";
 import { cn } from "@/lib/utils";
+import { ZonaBadge } from "@/components/zonas/zona-badge";
 import type { Inmueble } from "@/lib/generated/prisma/client";
 
 type InmuebleFila = Inmueble & {
   bloque: { id: string; calle: string; numero: string } | null;
+  zona?: { nombre: string; color: string } | null;
   asesor?: { nombre: string } | null;
 };
 
@@ -70,6 +72,7 @@ export function InmueblesTable({
         <TableRow>
           <TableHead>Referencia</TableHead>
           <TableHead>Dirección</TableHead>
+          <TableHead className="hidden lg:table-cell">Zona</TableHead>
           <TableHead>Tipo</TableHead>
           <TableHead className="text-right">Precio</TableHead>
           <TableHead>Estado</TableHead>
@@ -114,6 +117,9 @@ export function InmueblesTable({
                     </>
                   )}
                 </span>
+              </TableCell>
+              <TableCell className="hidden lg:table-cell">
+                <ZonaBadge zona={inmueble.zona} />
               </TableCell>
               <TableCell>
                 <span className="block">{TIPO_INMUEBLE_LABELS[inmueble.tipoInmueble]}</span>

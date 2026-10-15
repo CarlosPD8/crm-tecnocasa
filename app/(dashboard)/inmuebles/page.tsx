@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { MapPinned, Plus } from "lucide-react";
 
-import { getContexto, opcionesAsesor } from "@/lib/db";
+import { getContexto, opcionesAsesor, zonasVisibles } from "@/lib/db";
+import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { BarraFiltros } from "@/components/shared/filtros/barra-filtros";
 import { InmueblesTable } from "@/components/inmuebles/inmuebles-table";
@@ -17,23 +18,30 @@ export default async function InmueblesPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { db, esDirector } = await getContexto();
+  const ctx = await getContexto();
+  const { db, esDirector } = ctx;
+  const sinZona = ctx.zonas?.length === 0;
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? "1") || 1);
   const { where, orderBy } = consultaInmuebles(sp);
   const filtrado = Boolean(sp.q || contarFiltros("inmuebles", sp));
 
-  const [inmuebles, total, localidades, asesores] = await Promise.all([
+  const [inmuebles, total, localidades, asesores, zonas] = await Promise.all([
     db.inmueble.findMany({
       where,
       orderBy,
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      include: { bloque: { select: { id: true, calle: true, numero: true } }, asesor: { select: { nombre: true } } },
+      include: {
+        bloque: { select: { id: true, calle: true, numero: true } },
+        zona: { select: { nombre: true, color: true } },
+        asesor: { select: { nombre: true } },
+      },
     }),
     db.inmueble.count({ where }),
     db.inmueble.findMany({ distinct: ["localidad"], select: { localidad: true }, orderBy: { localidad: "asc" } }),
     opcionesAsesor(db),
+    zonasVisibles(ctx),
   ]);
 
   return (
@@ -43,15 +51,17 @@ export default async function InmueblesPage({
         title="Inmuebles"
         description={`${total} ${total === 1 ? "inmueble" : "inmuebles"}${filtrado ? " con los filtros actuales" : " en cartera"}.`}
         actions={
-          <Button
-            size="lg"
-            nativeButton={false}
-            render={
-              <Link href="/inmuebles/nuevo">
-                <Plus /> Nuevo inmueble
-              </Link>
-            }
-          />
+          !sinZona && (
+            <Button
+              size="lg"
+              nativeButton={false}
+              render={
+                <Link href="/inmuebles/nuevo">
+                  <Plus /> Nuevo inmueble
+                </Link>
+              }
+            />
+          )
         }
       />
 
@@ -59,16 +69,25 @@ export default async function InmueblesPage({
         <BarraFiltros
           entidad="inmuebles"
           exportar={esDirector ? { total: total } : undefined}
-          pdf={{ total }}
+          pdf={{ total, hoja: true }}
           ariaBusqueda="Buscar inmuebles"
           placeholder="Referencia, dirección, bloque, propietario…"
           opciones={{
+            zona: Object.fromEntries(zonas.map((z) => [z.id, z.nombre])),
             localidad: Object.fromEntries(localidades.map((l) => [l.localidad, l.localidad])),
             asesor: opcionesFiltroAsesor(asesores),
           }}
         />
 
-        <InmueblesTable inmuebles={inmuebles} filtrado={filtrado} />
+        {sinZona && !total ? (
+          <EmptyState
+            icon={MapPinned}
+            title="Aún no tienes zona asignada"
+            description="Pídesela al director: hasta entonces no verás pisos ni bloques."
+          />
+        ) : (
+          <InmueblesTable inmuebles={inmuebles} filtrado={filtrado} />
+        )}
       </div>
 
       <Pagination

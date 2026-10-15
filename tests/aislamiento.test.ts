@@ -12,7 +12,7 @@ describe.skipIf(!url)("aislamiento entre oficinas", () => {
   const base = new PrismaClient({ adapter: new PrismaPg({ connectionString: url ?? "" }) });
   const dbA = base.$extends(extensionOficina("ofiA", "userA"));
   const dbB = base.$extends(extensionOficina("ofiB", "userB"));
-  const ids = { clienteA: "", clienteB: "", inmuebleA: "", bloqueB: "" };
+  const ids = { clienteA: "", clienteB: "", inmuebleA: "", bloqueB: "", zonaA: "", zonaB: "" };
 
   beforeAll(async () => {
     await base.oficina.createMany({
@@ -27,6 +27,8 @@ describe.skipIf(!url)("aislamiento entre oficinas", () => {
         { id: "userB", oficinaId: "ofiB", nombre: "Beto", email: "b@test.local", rol: "DIRECTOR" },
       ],
     });
+    ids.zonaA = (await dbA.zona.create({ data: { nombre: "Centro", color: "azul" } })).id;
+    ids.zonaB = (await dbB.zona.create({ data: { nombre: "Centro", color: "azul" } })).id;
     ids.clienteA = (await dbA.cliente.create({ data: { nombre: "Cli", apellidos: "A", dni: "12345678Z" } })).id;
     ids.clienteB = (await dbB.cliente.create({ data: { nombre: "Cli", apellidos: "B", dni: "12345678Z" } })).id;
     ids.inmuebleA = (
@@ -39,12 +41,18 @@ describe.skipIf(!url)("aislamiento entre oficinas", () => {
           tipoOperacion: "VENTA",
           precio: 100,
           propietarioId: ids.clienteA,
+          zonaId: ids.zonaA,
         },
       })
     ).id;
-    ids.bloqueB = (await dbB.bloque.create({ data: { calle: "C/ B", numero: "1", localidad: "Granada" } })).id;
+    ids.bloqueB = (
+      await dbB.bloque.create({ data: { calle: "C/ B", numero: "1", localidad: "Granada", zonaId: ids.zonaB } })
+    ).id;
     await dbB.inmueble.create({
-      data: { referencia: "REF-1", direccion: "C/ B", localidad: "Granada", tipoInmueble: "PISO", tipoOperacion: "VENTA", precio: 1 },
+      data: {
+        referencia: "REF-1", direccion: "C/ B", localidad: "Granada", tipoInmueble: "PISO", tipoOperacion: "VENTA",
+        precio: 1, zonaId: ids.zonaB,
+      },
     });
   });
 
@@ -56,6 +64,24 @@ describe.skipIf(!url)("aislamiento entre oficinas", () => {
     const c = await base.cliente.findUniqueOrThrow({ where: { id: ids.clienteA } });
     expect(c.oficinaId).toBe("ofiA");
     expect(c.creadoPorId).toBe("userA");
+  });
+
+  it("las zonas y sus asesores no cruzan oficinas", async () => {
+    expect((await dbA.zona.findMany()).map((z) => z.id)).toEqual([ids.zonaA]);
+    expect(await dbA.zona.findUnique({ where: { id: ids.zonaB } })).toBeNull();
+    await expect(dbA.zonaAsesor.create({ data: { zonaId: ids.zonaB, usuarioId: "userA" } })).rejects.toThrow(
+      /otra oficina/
+    );
+    await expect(dbA.zonaAsesor.create({ data: { zonaId: ids.zonaA, usuarioId: "userB" } })).rejects.toThrow(
+      /otra oficina/
+    );
+    await expect(
+      dbA.bloque.create({ data: { calle: "C/ X", numero: "1", localidad: "Granada", zonaId: ids.zonaB } })
+    ).rejects.toThrow(/otra oficina/);
+    await expect(
+      dbA.inmueble.update({ where: { id: ids.inmuebleA }, data: { zonaId: ids.zonaB } })
+    ).rejects.toThrow(/otra oficina/);
+    expect(await dbB.zonaAsesor.deleteMany({ where: { zonaId: ids.zonaA } })).toEqual({ count: 0 });
   });
 
   it("permite el mismo DNI y la misma referencia en oficinas distintas", async () => {

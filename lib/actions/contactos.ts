@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getContexto } from "@/lib/db";
+import { dbSinZonas, getContexto } from "@/lib/db";
 import { frase, registrarActividad } from "@/lib/actividad";
 import {
   contactoInmuebleSchema,
@@ -59,7 +59,8 @@ export async function crearContacto(clienteId: string, data: ContactoInput) {
  * dates move together. The next follow-up belongs to the property.
  */
 export async function crearContactoInmueble(inmuebleId: string, data: ContactoInmuebleInput) {
-  const { db } = await getContexto();
+  const ctx = await getContexto();
+  const { db } = ctx;
   const parsed = contactoInmuebleSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
@@ -70,8 +71,10 @@ export async function crearContactoInmueble(inmuebleId: string, data: ContactoIn
   if (!datosInmueble) {
     return { success: false as const, error: { nota: ["Este inmueble ya no existe."] } };
   }
+  // Any client of the office: an advisor may find one of another zone by exact
+  // DNI or phone. From now on they see them (contacted about their flat).
   const cliente = clienteId
-    ? await db.cliente.findUnique({ where: { id: clienteId }, select: { nombre: true, apellidos: true } })
+    ? await dbSinZonas(ctx).cliente.findUnique({ where: { id: clienteId }, select: { nombre: true, apellidos: true } })
     : null;
   if (clienteId && !cliente) {
     return { success: false as const, error: { clienteId: ["Ese cliente ya no existe."] } };

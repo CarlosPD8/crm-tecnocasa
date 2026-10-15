@@ -86,6 +86,7 @@ export async function exportar(request: NextRequest, entidad: Entidad) {
       orderBy,
       include: {
         bloque: { select: { calle: true, numero: true } },
+        zona: { select: { nombre: true } },
         propietario: { select: { nombre: true, apellidos: true, telefono: true } },
         asesor: { select: { nombre: true } },
         creadoPor: { select: { nombre: true } },
@@ -99,6 +100,7 @@ export async function exportar(request: NextRequest, entidad: Entidad) {
         texto("Dirección", (i) => i.direccion, 28),
         texto("Escalera · planta · puerta", (i) => formatUbicacion(i), 20),
         texto("Localidad", (i) => i.localidad),
+        texto("Zona", (i) => i.zona?.nombre, 16),
         texto("Bloque", (i) => (i.bloque ? `${i.bloque.calle} ${i.bloque.numero}` : null), 22),
         texto("Tipo", (i) => TIPO_INMUEBLE_LABELS[i.tipoInmueble], 10),
         texto("Operación", (i) => TIPO_OPERACION_LABELS[i.tipoOperacion], 10),
@@ -157,7 +159,11 @@ export async function exportar(request: NextRequest, entidad: Entidad) {
   const bloques = await db.bloque.findMany({
     where,
     orderBy,
-    include: { _count: { select: { inmuebles: true } }, creadoPor: { select: { nombre: true } } },
+    include: {
+      zona: { select: { nombre: true } },
+      _count: { select: { inmuebles: true } },
+      creadoPor: { select: { nombre: true } },
+    },
   });
   const resumen = await resumenPorBloque(db, bloques.map((b) => b.id));
   const filas = bloques.map((b) => ({ ...b, resumen: resumen.get(b.id)! }));
@@ -170,6 +176,7 @@ export async function exportar(request: NextRequest, entidad: Entidad) {
       texto("Localidad", (b) => b.localidad),
       texto("Nombre", (b) => b.nombre),
       texto("Código postal", (b) => b.codigoPostal, 9),
+      texto("Zona", (b) => b.zona?.nombre, 16),
       numero("Pisos", (b) => b._count.inmuebles, 7),
       numero("Con inquilinos", (b) => b.resumen.ocupacion.INQUILINOS),
       numero("Vive el propietario", (b) => b.resumen.ocupacion.PROPIETARIO),

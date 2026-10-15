@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { extensionOficina } from "@/lib/ambito-oficina";
 import { registrarActividad } from "@/lib/actividad";
+import { Prisma } from "@/lib/generated/prisma/client";
 import type { RolUsuario } from "@/lib/generated/prisma/enums";
 
 /**
@@ -15,8 +16,9 @@ import type { RolUsuario } from "@/lib/generated/prisma/enums";
  * `@/lib/prisma` directly (enforced by ESLint).
  */
 
-export function crearDbOficina(oficinaId: string, usuarioId: string) {
-  return prisma.$extends(extensionOficina(oficinaId, usuarioId));
+/** `zonas`: an advisor's zone ids; null (director) sees the whole office. */
+export function crearDbOficina(oficinaId: string, usuarioId: string, zonas: readonly string[] | null = null) {
+  return prisma.$extends(extensionOficina(oficinaId, usuarioId, zonas));
 }
 
 export type DbOficina = ReturnType<typeof crearDbOficina>;
@@ -26,6 +28,9 @@ export type Contexto = {
   oficina: { id: string; nombre: string };
   oficinaId: string;
   esDirector: boolean;
+  /** The advisor's zone ids; null for a director, who sees every zone. */
+  zonas: string[] | null;
+  /** Scoped to the office and, for an advisor, to their zones. */
   db: DbOficina;
 };
 
@@ -41,7 +46,10 @@ export const getSesionPerfil = cache(async () => {
 
   const usuario = await prisma.usuario.findUnique({
     where: { id },
-    include: { oficina: { select: { id: true, nombre: true, activa: true } } },
+    include: {
+      oficina: { select: { id: true, nombre: true, activa: true } },
+      zonasAsignadas: { select: { zonaId: true } },
+    },
   });
   return { id, email: data.claims.email as string | undefined, usuario };
 });
@@ -93,14 +101,17 @@ const resolverContexto = cache(async (): Promise<Resolucion> => {
   if (usuario.debeCambiarPassword) return { estado: "cambiar-contrasena" };
   anotarAcceso(usuario);
 
+  const esDirector = usuario.rol === "DIRECTOR";
+  const zonas = esDirector ? null : usuario.zonasAsignadas.map((z) => z.zonaId);
   return {
     estado: "ok",
     ctx: {
       usuario: { id: usuario.id, nombre: usuario.nombre, email: usuario.email, rol: usuario.rol },
       oficina: { id: usuario.oficina.id, nombre: usuario.oficina.nombre },
       oficinaId: usuario.oficinaId,
-      esDirector: usuario.rol === "DIRECTOR",
-      db: crearDbOficina(usuario.oficinaId, usuario.id),
+      esDirector,
+      zonas,
+      db: crearDbOficina(usuario.oficinaId, usuario.id, zonas),
     },
   };
 });
@@ -156,6 +167,20 @@ export async function existe(db: DbOficina, modelo: ModeloOficina, id: string | 
   return (await delegado.count({ where: { id } })) > 0;
 }
 
+/**
+ * The whole office, without the zone scope. Only for what an advisor may reach
+ * outside their zones: finding an existing client by exact DNI or phone to link
+ * them (see `buscarClientes`). Never for listing.
+ */
+export function dbSinZonas(ctx: Contexto): DbOficina {
+  return ctx.zonas ? crearDbOficina(ctx.oficinaId, ctx.usuario.id) : ctx.db;
+}
+
+/** Like `existe`, but anywhere in the office (a client found by exact DNI or phone). */
+export function existeEnOficina(ctx: Contexto, modelo: ModeloOficina, id: string | null | undefined) {
+  return existe(dbSinZonas(ctx), modelo, id);
+}
+
 /** Whether the id is an active user of the office (to assign as advisor). */
 export async function esAsesorValido(db: DbOficina, id: string | null | undefined) {
   if (!id) return false;
@@ -193,4 +218,45 @@ export async function resolverAsesor(
   // Keeping a now-deactivated advisor while editing other fields is fine.
   if (pedido === actual || (await esAsesorValido(ctx.db, pedido))) return { ok: true, asesorId: pedido };
   return { ok: false, error: "Elige un asesor activo de la oficina." };
+}
+
+export type OpcionZona = { id: string; nombre: string; color: string };
+
+/** Zones the user works with: all of the office for a director, their own for an advisor. */
+export function zonasVisibles(ctx: Contexto): Promise<OpcionZona[]> {
+  return ctx.db.zona.findMany({
+    where: ctx.zonas ? { id: { in: ctx.zonas } } : undefined,
+    select: { id: true, nombre: true, color: true },
+    orderBy: { nombre: "asc" },
+  });
+}
+
+/**
+ * Zone to store on a block or a loose property. Required when creating (an
+ * advisor picks one of theirs); when editing only the director changes it.
+ *
+ * `actual`: the record's current zone when editing, `undefined` when creating.
+ * Returns `undefined` for "leave as is", or an error message.
+ */
+export async function resolverZona(
+  ctx: Contexto,
+  pedida: string | undefined,
+  actual?: string | null
+): Promise<{ ok: true; zonaId: string | undefined } | { ok: false; error: string }> {
+  const creando = actual === undefined;
+  if (!creando && (!ctx.esDirector || pedida === undefined || pedida === actual)) {
+    return { ok: true, zonaId: undefined };
+  }
+  if (!pedida) return { ok: false, error: "Elige una zona." };
+  if (ctx.zonas) {
+    return ctx.zonas.includes(pedida) ? { ok: true, zonaId: pedida } : { ok: false, error: "Elige una de tus zonas." };
+  }
+  return (await ctx.db.zona.count({ where: { id: pedida } })) > 0
+    ? { ok: true, zonaId: pedida }
+    : { ok: false, error: "Elige una zona de la oficina." };
+}
+
+/** A unique constraint was violated (P2002): a duplicate name, DNI, reference… */
+export function esUnicoViolado(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }

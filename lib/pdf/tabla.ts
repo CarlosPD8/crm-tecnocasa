@@ -29,6 +29,12 @@ export type DocumentoPdf<T> = {
   totales?: string;
   /** Taller rows leave room to write by hand (the block sheet). */
   altoMinimoFila?: number;
+  /**
+   * Groups rows under a band (the street sheet: one per block). Rows must come
+   * sorted by group. A band never sits alone at the bottom of a page, and it is
+   * repeated as «(continuación)» when a group goes on to the next one.
+   */
+  grupo?: (fila: T) => string;
   archivo: string;
 };
 
@@ -46,6 +52,8 @@ const GRIS = rgb(0.45, 0.42, 0.38);
 const LINEA = rgb(0.86, 0.83, 0.78);
 const CABECERA = rgb(0.973, 0.906, 0.788); // #f8e7c9
 const CEBRA = rgb(0.985, 0.975, 0.958);
+const BANDA = rgb(0.9, 0.95, 0.925); // the accent: a pale brand green
+const ALTO_BANDA = 18;
 
 /** The standard fonts only cover WinAnsi: anything else (emoji…) becomes «?». */
 function limpiador(fuente: PDFFont) {
@@ -153,13 +161,35 @@ export async function generarPdf<T>(doc: DocumentoPdf<T>) {
     dibujarCeldas(cabecera.lineas, cabecera.alto, negrita, VERDE);
   }
 
+  function banda(nombre: string) {
+    pagina.drawRectangle({ x: MARGEN, y: y - ALTO_BANDA, width: anchoUtil, height: ALTO_BANDA, color: BANDA });
+    const [linea] = partir(limpio(nombre), negrita, 9.5, anchoUtil - 2 * RELLENO);
+    pagina.drawText(linea, { x: MARGEN + RELLENO, y: y - ALTO_BANDA + 5.5, size: 9.5, font: negrita, color: VERDE });
+    y -= ALTO_BANDA;
+  }
+
   nuevaPagina(true);
-  doc.filas.forEach((fila, n) => {
+  let grupoActual: string | null = null;
+  // Zebra stripes start over in each group.
+  let enGrupo = 0;
+  doc.filas.forEach((fila) => {
     const { lineas, alto } = filaDeCeldas(doc.columnas.map((c) => c.valor?.(fila) ?? ""), normal);
-    if (y - alto < MARGEN + PIE) nuevaPagina(false);
-    if (n % 2 === 1) pagina.drawRectangle({ x: MARGEN, y: y - alto, width: anchoUtil, height: alto, color: CEBRA });
+    const grupo = doc.grupo ? doc.grupo(fila) : null;
+    const empiezaGrupo = grupo !== null && grupo !== grupoActual;
+    // A new group's band goes to the next page with its first row.
+    if (y - alto - (empiezaGrupo ? ALTO_BANDA : 0) < MARGEN + PIE) {
+      nuevaPagina(false);
+      if (grupo !== null && !empiezaGrupo) banda(`${grupo} (continuación)`);
+    }
+    if (empiezaGrupo) {
+      banda(grupo);
+      grupoActual = grupo;
+      enGrupo = 0;
+    }
+    if (enGrupo % 2 === 1) pagina.drawRectangle({ x: MARGEN, y: y - alto, width: anchoUtil, height: alto, color: CEBRA });
     pagina.drawLine({ start: { x: MARGEN, y: y - alto }, end: { x: ANCHO - MARGEN, y: y - alto }, thickness: 0.5, color: LINEA });
     dibujarCeldas(lineas, alto, normal);
+    enGrupo++;
   });
 
   if (doc.totales) {

@@ -10,23 +10,25 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Initials } from "@/components/shared/item-list";
 
-type ClienteResultado = {
-  id: string;
-  nombre: string;
-  apellidos: string;
-  telefono: string | null;
-};
+type ClienteResultado = Awaited<ReturnType<typeof buscarClientes>>[number];
 
 export function ClientePicker({
   value,
   valueLabel,
   onChange,
   placeholder = "Buscar cliente...",
+  incluirAjenos = true,
 }: {
   value: string | null;
   valueLabel?: string | null;
   onChange: (cliente: { id: string; label: string } | null) => void;
   placeholder?: string;
+  /**
+   * Clients of another zone found by exact DNI or phone. Linking one to a flat
+   * (owner, interested, contact, deal) makes them visible; an appointment
+   * doesn't, so the calendar leaves them out.
+   */
+  incluirAjenos?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -47,7 +49,7 @@ export function ClientePicker({
     setLoading(true);
     debounceRef.current = setTimeout(async () => {
       const r = await buscarClientes(value);
-      setResultados(r);
+      setResultados(incluirAjenos ? r : r.filter((c) => !c.deOtroAsesor));
       setLoading(false);
     }, 300);
   }
@@ -93,7 +95,7 @@ export function ClientePicker({
             <Input
               autoFocus
               aria-label="Buscar cliente"
-              placeholder="Nombre, teléfono o email…"
+              placeholder="Nombre, teléfono, email o DNI…"
               value={query}
               onChange={(e) => handleQueryChange(e.target.value)}
               className="pl-9"
@@ -143,6 +145,12 @@ export function ClientePicker({
                     {cliente.telefono && (
                       <span className="tabular block text-xs text-muted-foreground">
                         {cliente.telefono}
+                      </span>
+                    )}
+                    {cliente.deOtroAsesor && (
+                      // Found by exact DNI or phone outside the advisor's zones.
+                      <span className="block text-xs text-muted-foreground">
+                        De otro asesor · al enlazarlo a tu piso lo verás
                       </span>
                     )}
                   </span>

@@ -20,6 +20,8 @@ alter table "Evento" enable row level security;
 alter table "Oficina" enable row level security;
 alter table "Usuario" enable row level security;
 alter table "Actividad" enable row level security;
+alter table "Zona" enable row level security;
+alter table "ZonaAsesor" enable row level security;
 alter table "_prisma_migrations" enable row level security;
 
 revoke all on all tables in schema public from anon, authenticated;

@@ -1,7 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { existe, getContexto, resolverAsesor, SIN_PERMISO, type DbOficina } from "@/lib/db";
+import {
+  esUnicoViolado,
+  existeEnOficina,
+  getContexto,
+  resolverAsesor,
+  resolverZona,
+  SIN_PERMISO,
+  type Contexto,
+  type DbOficina,
+} from "@/lib/db";
 import { cambioInmueble, frase, incluirCambiosInmueble, registrarActividad } from "@/lib/actividad";
 import { inmuebleSchema, type InmuebleInput } from "@/lib/validations/inmueble";
 
@@ -44,21 +53,60 @@ function buildData(data: InmuebleInput) {
 }
 
 type DatosInmueble = ReturnType<typeof buildData>;
+type Anterior = { id: string; bloqueId: string | null; propietarioId: string | null; zonaId: string };
+type Errores = Record<string, string[]>;
 
-/** Field errors for a duplicate reference or links to rows outside the office. */
-async function comprobarDatos(db: DbOficina, datos: DatosInmueble, excluirId?: string) {
+const REFERENCIA_REPETIDA = { referencia: ["Ya existe un inmueble con esta referencia."] };
+
+/**
+ * Checks the reference and the links, and works out the zone. Only links that
+ * change are checked, so an advisor keeps a block they don't see (one of
+ * another zone) as it is. The owner may be any client of the office: an
+ * advisor links an existing one by exact DNI or phone (buscarClientes).
+ *
+ * Returns the zone to write (undefined: leave as is, or the block's), or errors.
+ */
+async function comprobarDatos(
+  ctx: Contexto,
+  datos: DatosInmueble,
+  zonaPedida: string | undefined,
+  anterior?: Anterior
+): Promise<{ errores: Errores } | { errores: null; zonaId: string | undefined }> {
+  const { db } = ctx;
   const duplicado = await db.inmueble.findFirst({
-    where: { referencia: datos.referencia, ...(excluirId ? { NOT: { id: excluirId } } : {}) },
+    where: { referencia: datos.referencia, ...(anterior ? { NOT: { id: anterior.id } } : {}) },
     select: { id: true },
   });
-  if (duplicado) return { referencia: ["Ya existe un inmueble con esta referencia."] };
-  if (datos.propietarioId && !(await existe(db, "cliente", datos.propietarioId))) {
-    return { propietarioId: ["El propietario ya no existe."] };
+  if (duplicado) return { errores: REFERENCIA_REPETIDA };
+
+  if (
+    datos.propietarioId &&
+    datos.propietarioId !== anterior?.propietarioId &&
+    !(await existeEnOficina(ctx, "cliente", datos.propietarioId))
+  ) {
+    return { errores: { propietarioId: ["El propietario ya no existe."] } };
   }
-  if (datos.bloqueId && !(await existe(db, "bloque", datos.bloqueId))) {
-    return { bloqueId: ["El bloque ya no existe."] };
+
+  if (anterior && datos.bloqueId === anterior.bloqueId) {
+    // Same block, or still loose: a loose one may change zone (director only).
+    if (datos.bloqueId) return { errores: null, zonaId: undefined };
+    const zona = await resolverZona(ctx, zonaPedida, anterior.zonaId);
+    return zona.ok ? { errores: null, zonaId: zona.zonaId } : { errores: { zonaId: [zona.error] } };
   }
-  return null;
+
+  if (datos.bloqueId) {
+    const bloque = await db.bloque.findUnique({ where: { id: datos.bloqueId }, select: { zonaId: true } });
+    if (!bloque) return { errores: { bloqueId: ["El bloque ya no existe."] } };
+    // Entering a block means taking its zone: an advisor can't move a flat to another zone.
+    if (anterior && !ctx.esDirector && bloque.zonaId !== anterior.zonaId) {
+      return { errores: { bloqueId: ["Ese bloque está en otra zona. Pide al director que mueva el piso."] } };
+    }
+    return { errores: null, zonaId: anterior ? undefined : bloque.zonaId };
+  }
+
+  // Leaving a block keeps its zone (the director may pick another one).
+  const zona = await resolverZona(ctx, zonaPedida, anterior?.zonaId);
+  return zona.ok ? { errores: null, zonaId: zona.zonaId } : { errores: { zonaId: [zona.error] } };
 }
 
 /** Assigning a property as owner tags the client as «Propietario». */
@@ -86,22 +134,31 @@ export async function crearInmueble(data: InmuebleInput) {
   }
 
   const datos = buildData(parsed.data);
-  const error = await comprobarDatos(db, datos);
-  if (error) return { success: false as const, error };
+  const comprobado = await comprobarDatos(ctx, datos, parsed.data.zonaId);
+  if (comprobado.errores) return { success: false as const, error: comprobado.errores };
   const asesor = await resolverAsesor(ctx, parsed.data.asesorId);
-  if (!asesor.ok) return { success: false as const, error: { asesorId: [asesor.error] } };
+  if (!asesor.ok) return { success: false as const, error: { asesorId: [asesor.error] } as Errores };
 
-  const inmueble = await db.$transaction(async (tx) => {
-    const creado = await tx.inmueble.create({ data: { ...datos, asesorId: asesor.asesorId } });
-    await registrarActividad(tx, {
-      accion: "ALTA",
-      entidad: "INMUEBLE",
-      entidadId: creado.id,
-      enlace: `/inmuebles/${creado.id}`,
-      resumen: frase.altaInmueble(creado.referencia, creado.direccion),
+  let inmueble;
+  try {
+    inmueble = await db.$transaction(async (tx) => {
+      const creado = await tx.inmueble.create({
+        data: { ...datos, zonaId: comprobado.zonaId!, asesorId: asesor.asesorId },
+      });
+      await registrarActividad(tx, {
+        accion: "ALTA",
+        entidad: "INMUEBLE",
+        entidadId: creado.id,
+        enlace: `/inmuebles/${creado.id}`,
+        resumen: frase.altaInmueble(creado.referencia, creado.direccion),
+      });
+      return creado;
     });
-    return creado;
-  });
+  } catch (e) {
+    // The reference exists in a zone this advisor doesn't see.
+    if (esUnicoViolado(e)) return { success: false as const, error: REFERENCIA_REPETIDA as Errores };
+    throw e;
+  }
   await marcarPropietario(db, inmueble.propietarioId);
 
   revalidatePath("/inmuebles");
@@ -118,24 +175,36 @@ export async function actualizarInmueble(id: string, data: InmuebleInput) {
   }
 
   const anterior = await db.inmueble.findUnique({ where: { id }, include: incluirCambiosInmueble });
-  if (!anterior) return { success: false as const, error: { _: ["Este inmueble ya no existe."] } };
+  if (!anterior) return { success: false as const, error: { _: ["Este inmueble ya no existe."] } as Errores };
 
   const datos = buildData(parsed.data);
-  const error = await comprobarDatos(db, datos, id);
-  if (error) return { success: false as const, error };
+  // An advisor can't see (or change) a block of another zone: it stays.
+  if (anterior.bloqueId && !anterior.bloque) datos.bloqueId = anterior.bloqueId;
+  const comprobado = await comprobarDatos(ctx, datos, parsed.data.zonaId, anterior);
+  if (comprobado.errores) return { success: false as const, error: comprobado.errores };
   const asesor = await resolverAsesor(ctx, parsed.data.asesorId, anterior.asesorId);
-  if (!asesor.ok) return { success: false as const, error: { asesorId: [asesor.error] } };
+  if (!asesor.ok) return { success: false as const, error: { asesorId: [asesor.error] } as Errores };
 
-  const actualizado = await db.$transaction(async (tx) => {
-    const nuevo = await tx.inmueble.update({
-      where: { id },
-      data: { ...datos, asesorId: asesor.asesorId },
-      include: incluirCambiosInmueble,
+  let actualizado;
+  try {
+    actualizado = await db.$transaction(async (tx) => {
+      const nuevo = await tx.inmueble.update({
+        where: { id },
+        data: {
+          ...datos,
+          asesorId: asesor.asesorId,
+          ...(comprobado.zonaId ? { zonaId: comprobado.zonaId } : {}),
+        },
+        include: incluirCambiosInmueble,
+      });
+      const cambio = cambioInmueble(anterior, nuevo);
+      if (cambio) await registrarActividad(tx, cambio);
+      return nuevo;
     });
-    const cambio = cambioInmueble(anterior, nuevo);
-    if (cambio) await registrarActividad(tx, cambio);
-    return nuevo;
-  });
+  } catch (e) {
+    if (esUnicoViolado(e)) return { success: false as const, error: REFERENCIA_REPETIDA as Errores };
+    throw e;
+  }
   await marcarPropietario(db, actualizado.propietarioId);
 
   revalidatePath("/inmuebles");

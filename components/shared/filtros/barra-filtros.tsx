@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Download, FileText, Funnel, LoaderCircle, RotateCcw, Search, X } from "lucide-react";
+import { ChevronDown, Download, FileText, Funnel, List, LoaderCircle, RotateCcw, Search, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { DEFINICIONES, type EntidadFiltrable } from "@/lib/filtros/definiciones";
@@ -30,6 +30,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AffixInput, Segmented } from "@/components/shared/form";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLinkItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type Valores = Record<string, string>;
 type OpcionesDinamicas = Record<string, Record<string, string>>;
@@ -49,8 +55,11 @@ export function BarraFiltros({
   opciones?: OpcionesDinamicas;
   /** Directors only: offers the Excel of what the list shows (`total` rows). */
   exportar?: { total: number };
-  /** Everyone: the same list as a landscape PDF to print. */
-  pdf?: { total: number };
+  /**
+   * Everyone: the same list as a landscape PDF to print. With `hoja`, it also
+   * offers the street sheet (flats grouped by block, with room for notes).
+   */
+  pdf?: { total: number; hoja?: boolean };
 }) {
   const definicion = DEFINICIONES[entidad];
   const campos = definicion.campos as readonly Campo[];
@@ -233,7 +242,7 @@ export function BarraFiltros({
 
         {(pdf || exportar) && (
           <div className="ml-auto flex shrink-0 gap-2">
-            {pdf && <BotonPdf total={pdf.total} />}
+            {pdf && <BotonPdf total={pdf.total} hoja={pdf.hoja} />}
             {exportar && <BotonExportar total={exportar.total} />}
           </div>
         )}
@@ -511,7 +520,7 @@ function BotonExportar({ total }: { total: number }) {
 }
 
 /** Opens the PDF in a new tab, where the browser lets you print or save it. */
-function BotonPdf({ total }: { total: number }) {
+function BotonPdf({ total, hoja = false }: { total: number; hoja?: boolean }) {
   const href = useRutaConFiltros("pdf");
 
   if (total === 0 || total > LIMITE_PDF) {
@@ -524,6 +533,37 @@ function BotonPdf({ total }: { total: number }) {
       >
         <FileText /> <span className="hidden sm:inline">PDF</span>
       </Button>
+    );
+  }
+  if (hoja) {
+    const conFormato = `${href}${href.includes("?") ? "&" : "?"}formato=hoja`;
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button variant="outline" className="h-9 shrink-0 gap-2" aria-label={`PDF de ${total}`}>
+              <FileText /> <span className="hidden sm:inline">PDF</span>
+              <ChevronDown className="size-3.5 text-muted-foreground" />
+            </Button>
+          }
+        />
+        <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuLinkItem href={href} target="_blank" rel="noopener" className="items-start py-2">
+            <List className="mt-0.5" />
+            <span className="flex flex-col">
+              <span className="font-medium">Lista</span>
+              <span className="text-xs text-muted-foreground">Una fila por piso, en el orden de la pantalla.</span>
+            </span>
+          </DropdownMenuLinkItem>
+          <DropdownMenuLinkItem href={conFormato} target="_blank" rel="noopener" className="items-start py-2">
+            <FileText className="mt-0.5" />
+            <span className="flex flex-col">
+              <span className="font-medium">Hoja para la calle</span>
+              <span className="text-xs text-muted-foreground">Agrupada por bloque y planta, con hueco para notas.</span>
+            </span>
+          </DropdownMenuLinkItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     );
   }
   return (

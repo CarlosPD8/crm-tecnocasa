@@ -39,8 +39,10 @@ import {
   Segmented,
 } from "@/components/shared/form";
 import { AsesorSelect } from "@/components/shared/asesor-select";
+import { ZonaSelect } from "@/components/zonas/zona-select";
+import { ZonaBadge } from "@/components/zonas/zona-badge";
 import type { Inmueble } from "@/lib/generated/prisma/client";
-import type { OpcionAsesor } from "@/lib/db";
+import type { OpcionAsesor, OpcionZona } from "@/lib/db";
 
 // `precio` es un Decimal de Prisma, no serializable al cruzar de Server a
 // Client Component: el llamador debe convertirlo a string antes de pasarlo.
@@ -56,6 +58,11 @@ const CAPTACION_OPCIONES: Record<CaptacionForm, string> = {
 /**
  * `asesores` is only passed to directors: it shows the advisor picker, which
  * starts on the current advisor (editing) or on `asesorInicial` (new property).
+ *
+ * Zone: a flat in a block is in the block's zone; a loose one picks it from
+ * `zonas` (only the director changes it once created). `zonaActual` names it
+ * when it can't be changed here, and `bloqueAjeno` marks a block the advisor
+ * doesn't see (another zone): it stays as it is.
  */
 export function InmuebleForm({
   inmueble,
@@ -63,14 +70,23 @@ export function InmuebleForm({
   bloqueInicial,
   asesores,
   asesorInicial,
+  zonas,
+  zonaActual,
+  bloqueAjeno = false,
+  esDirector,
 }: {
   inmueble?: InmuebleParaFormulario;
   propietarioInicial?: { id: string; label: string } | null;
   bloqueInicial?: BloqueSeleccionado | null;
   asesores?: OpcionAsesor[];
   asesorInicial?: string;
+  zonas: OpcionZona[];
+  zonaActual?: { nombre: string; color: string } | null;
+  bloqueAjeno?: boolean;
+  esDirector: boolean;
 }) {
   const router = useRouter();
+  const eligeZona = !inmueble || esDirector;
   const [propietario, setPropietario] = useState<{ id: string; label: string } | null>(
     propietarioInicial ?? null
   );
@@ -106,6 +122,7 @@ export function InmuebleForm({
           captacion: inmueble.captacion ?? "SIN_MARCA",
           fechaFinAlquiler: inmueble.fechaFinAlquiler?.toISOString().slice(0, 10) ?? "",
           fechaProximoContacto: inmueble.fechaProximoContacto?.toISOString().slice(0, 10) ?? "",
+          zonaId: inmueble.zonaId,
           ...(asesores ? { asesorId: inmueble.asesorId ?? "" } : {}),
         }
       : {
@@ -117,6 +134,8 @@ export function InmuebleForm({
           localidad: bloqueInicial?.localidad ?? "",
           ocupacion: "SIN_DATOS",
           captacion: "SIN_MARCA",
+          // With a single zone there's nothing to choose.
+          zonaId: zonas.length === 1 ? zonas[0].id : "",
           ...(asesores ? { asesorId: asesorInicial ?? "" } : {}),
         },
   });
@@ -187,9 +206,46 @@ export function InmuebleForm({
             {...register("localidad")}
           />
         </Field>
-        <Field label="Bloque" optional className="sm:col-span-2" hint="Al elegirlo se rellenan la dirección y la localidad.">
-          <BloquePicker value={bloque} onChange={cambiarBloque} obtenerLocalidad={() => getValues("localidad")} />
-        </Field>
+        {bloqueAjeno ? (
+          <Field label="Bloque" hint="Está en un bloque de otra zona: no puedes cambiarlo." className="sm:col-span-2">
+            <p className="flex h-9 items-center text-sm text-muted-foreground">Bloque de otra zona</p>
+          </Field>
+        ) : (
+          <Field label="Bloque" optional className="sm:col-span-2" hint="Al elegirlo se rellenan la dirección y la localidad.">
+            <BloquePicker
+              value={bloque}
+              onChange={cambiarBloque}
+              obtenerLocalidad={() => getValues("localidad")}
+              obtenerZona={() => getValues("zonaId")}
+              zonas={zonas}
+            />
+          </Field>
+        )}
+        {bloque ? (
+          <Field label="Zona" hint="La del bloque." className="sm:col-span-2">
+            <ZonaBadge zona={bloque.zona} className="h-9 text-sm" />
+          </Field>
+        ) : eligeZona && !bloqueAjeno ? (
+          <Field label="Zona" htmlFor="zonaId" error={errors.zonaId?.message} className="sm:col-span-2">
+            <Controller
+              control={control}
+              name="zonaId"
+              render={({ field }) => (
+                <ZonaSelect
+                  id="zonaId"
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  zonas={zonas}
+                  invalid={!!errors.zonaId}
+                />
+              )}
+            />
+          </Field>
+        ) : (
+          <Field label="Zona" hint="Solo el director cambia la zona de un piso." className="sm:col-span-2">
+            <ZonaBadge zona={zonaActual} className="h-9 text-sm" />
+          </Field>
+        )}
         <Field label="Dirección" htmlFor="direccion" error={errors.direccion?.message} className="sm:col-span-2">
           <Input
             id="direccion"

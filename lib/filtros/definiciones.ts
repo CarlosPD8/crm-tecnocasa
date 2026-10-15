@@ -57,6 +57,7 @@ export const FILTROS_INMUEBLES = {
     { clave: "habitaciones", etiqueta: "Habitaciones", grupo: "Características", tipo: "rango", entero: true },
     { clave: "banos", etiqueta: "Baños", grupo: "Características", tipo: "rango", entero: true },
     { clave: "descripcion", etiqueta: "Descripción contiene", grupo: "Características", tipo: "texto", placeholder: "Terraza, ascensor, garaje…" },
+    { clave: "zona", etiqueta: "Zona", grupo: "Ubicación", tipo: "multi", opciones: "dinamico" },
     { clave: "localidad", etiqueta: "Localidad", grupo: "Ubicación", tipo: "multi", opciones: "dinamico" },
     { clave: "bloque", etiqueta: "Bloque (calle o nombre)", grupo: "Ubicación", tipo: "texto", placeholder: "C/ Estrellas…" },
     { clave: "enBloque", etiqueta: "Asignado a un bloque", grupo: "Ubicación", tipo: "bool" },
@@ -108,6 +109,7 @@ export const FILTROS_INMUEBLES = {
 
 export const FILTROS_BLOQUES = {
   campos: [
+    { clave: "zona", etiqueta: "Zona", grupo: "Ubicación", tipo: "multi", opciones: "dinamico" },
     { clave: "localidad", etiqueta: "Localidad", grupo: "Ubicación", tipo: "multi", opciones: "dinamico" },
     { clave: "cp", etiqueta: "Código postal", grupo: "Ubicación", tipo: "texto", placeholder: "18002" },
     { clave: "ocupacion", etiqueta: "Con algún piso…", grupo: "Pisos", tipo: "multi", opciones: OCUPACION_LABELS },

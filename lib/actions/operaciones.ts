@@ -1,12 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getContexto } from "@/lib/db";
+import { dbSinZonas, getContexto } from "@/lib/db";
 import { frase, registrarActividad } from "@/lib/actividad";
 import { operacionSchema, type OperacionInput } from "@/lib/validations/operacion";
 
 export async function crearOperacion(inmuebleId: string, data: OperacionInput) {
-  const { db } = await getContexto();
+  const ctx = await getContexto();
+  const { db } = ctx;
   const parsed = operacionSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
@@ -22,7 +23,8 @@ export async function crearOperacion(inmuebleId: string, data: OperacionInput) {
       error: { _: ["Este inmueble ya tiene una operación cerrada."] },
     };
   }
-  const cliente = await db.cliente.findUnique({
+  // Any client of the office (found by exact DNI or phone): see buscarClientes.
+  const cliente = await dbSinZonas(ctx).cliente.findUnique({
     where: { id: parsed.data.clienteId },
     select: { nombre: true, apellidos: true },
   });

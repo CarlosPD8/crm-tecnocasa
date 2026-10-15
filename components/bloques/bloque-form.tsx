@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 
@@ -11,12 +11,29 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Field, FormActions, FormSection, FormShell } from "@/components/shared/form";
+import { ZonaSelect } from "@/components/zonas/zona-select";
+import { ZonaBadge } from "@/components/zonas/zona-badge";
 import type { Bloque } from "@/lib/generated/prisma/client";
+import type { OpcionZona } from "@/lib/db";
 
-export function BloqueForm({ bloque }: { bloque?: Bloque }) {
+/**
+ * `zonas`: the ones the user can pick. When editing, only a director changes
+ * the zone; an advisor sees it read-only.
+ */
+export function BloqueForm({
+  bloque,
+  zonas,
+  esDirector,
+}: {
+  bloque?: Bloque & { zona: { nombre: string; color: string } | null };
+  zonas: OpcionZona[];
+  esDirector: boolean;
+}) {
   const router = useRouter();
+  const puedeCambiarZona = !bloque || esDirector;
   const {
     register,
+    control,
     handleSubmit,
     setError,
     formState: { errors, isSubmitting },
@@ -30,8 +47,10 @@ export function BloqueForm({ bloque }: { bloque?: Bloque }) {
           nombre: bloque.nombre ?? "",
           codigoPostal: bloque.codigoPostal ?? "",
           notas: bloque.notas ?? "",
+          zonaId: bloque.zonaId,
         }
-      : {},
+      : // With a single zone there's nothing to choose.
+        { zonaId: zonas.length === 1 ? zonas[0].id : "" },
   });
 
   async function onSubmit(data: BloqueInput) {
@@ -89,6 +108,35 @@ export function BloqueForm({ bloque }: { bloque?: Bloque }) {
         <Field label="Código postal" htmlFor="codigoPostal" optional>
           <Input id="codigoPostal" inputMode="numeric" className="tabular" {...register("codigoPostal")} />
         </Field>
+      </FormSection>
+
+      <FormSection title="Zona" description="Sus pisos están siempre en la zona del bloque.">
+        {puedeCambiarZona ? (
+          <Field
+            label="Zona"
+            htmlFor="zonaId"
+            error={errors.zonaId?.message}
+            hint={bloque ? "Al cambiarla, sus pisos pasan también a la nueva zona." : undefined}
+          >
+            <Controller
+              control={control}
+              name="zonaId"
+              render={({ field }) => (
+                <ZonaSelect
+                  id="zonaId"
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  zonas={zonas}
+                  invalid={!!errors.zonaId}
+                />
+              )}
+            />
+          </Field>
+        ) : (
+          <Field label="Zona" hint="Solo el director cambia la zona de un bloque.">
+            <ZonaBadge zona={bloque?.zona} className="h-9 text-sm" />
+          </Field>
+        )}
       </FormSection>
 
       <FormSection title="Detalles">

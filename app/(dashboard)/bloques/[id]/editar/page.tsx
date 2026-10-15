@@ -1,13 +1,16 @@
 import { notFound } from "next/navigation";
-import { getContexto } from "@/lib/db";
+import { getContexto, zonasVisibles } from "@/lib/db";
 import { formatBloque } from "@/lib/validations/bloque";
 import { BloqueForm } from "@/components/bloques/bloque-form";
 import { PageHeader } from "@/components/shared/page-header";
 
 export default async function EditarBloquePage({ params }: { params: Promise<{ id: string }> }) {
-  const { db } = await getContexto();
+  const ctx = await getContexto();
   const { id } = await params;
-  const bloque = await db.bloque.findUnique({ where: { id } });
+  const [bloque, zonas] = await Promise.all([
+    ctx.db.bloque.findUnique({ where: { id }, include: { zona: { select: { nombre: true, color: true } } } }),
+    zonasVisibles(ctx),
+  ]);
   if (!bloque) notFound();
 
   return (
@@ -17,7 +20,7 @@ export default async function EditarBloquePage({ params }: { params: Promise<{ i
         eyebrow="Editar bloque"
         title={formatBloque(bloque)}
       />
-      <BloqueForm bloque={bloque} />
+      <BloqueForm bloque={bloque} zonas={zonas} esDirector={ctx.esDirector} />
     </div>
   );
 }

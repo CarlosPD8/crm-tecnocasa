@@ -108,6 +108,11 @@ async function alta() {
       await tx.usuario.create({
         data: { id: data.user.id, oficinaId: o.id, nombre, email, rol: "DIRECTOR", debeCambiarPassword: true },
       });
+      // Every block and flat needs a zone: a new office starts with one, which
+      // the director can rename or split from «Zonas».
+      if (!existente) {
+        await tx.zona.create({ data: { oficinaId: o.id, nombre: "General", color: "gris", creadoPorId: data.user.id } });
+      }
       return o;
     });
     console.log(`\nListo. Oficina ${oficina.nombre} (id ${oficina.id}).`);

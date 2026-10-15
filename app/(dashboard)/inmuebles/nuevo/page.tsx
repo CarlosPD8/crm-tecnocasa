@@ -1,4 +1,4 @@
-import { getContexto, opcionesAsesor } from "@/lib/db";
+import { getContexto, opcionesAsesor, zonasVisibles } from "@/lib/db";
 import { InmuebleForm } from "@/components/inmuebles/inmueble-form";
 import { PageHeader } from "@/components/shared/page-header";
 import { formatBloque } from "@/lib/validations/bloque";
@@ -8,13 +8,20 @@ export default async function NuevoInmueblePage({
 }: {
   searchParams: Promise<{ bloque?: string; propietario?: string }>;
 }) {
-  const { db, esDirector, usuario } = await getContexto();
+  const ctx = await getContexto();
+  const { db, esDirector, usuario } = ctx;
   const { bloque: bloqueId, propietario: propietarioId } = await searchParams;
-  const [bloque, propietario, asesores] = await Promise.all([
+  const [bloque, propietario, asesores, zonas] = await Promise.all([
     bloqueId
       ? db.bloque.findUnique({
           where: { id: bloqueId },
-          select: { id: true, calle: true, numero: true, localidad: true },
+          select: {
+            id: true,
+            calle: true,
+            numero: true,
+            localidad: true,
+            zona: { select: { id: true, nombre: true, color: true } },
+          },
         })
       : null,
     // «Añadir inmueble» from a client's page: start with them as owner.
@@ -25,6 +32,7 @@ export default async function NuevoInmueblePage({
         })
       : null,
     esDirector ? opcionesAsesor(db) : undefined,
+    zonasVisibles(ctx),
   ]);
 
   const back = bloque
@@ -51,6 +59,8 @@ export default async function NuevoInmueblePage({
         propietarioInicial={propietario ? { id: propietario.id, label: `${propietario.nombre} ${propietario.apellidos}` } : null}
         asesores={asesores}
         asesorInicial={usuario.id}
+        zonas={zonas}
+        esDirector={esDirector}
       />
     </div>
   );

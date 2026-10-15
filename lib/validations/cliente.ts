@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Prisma } from "@/lib/generated/prisma/client";
 
 /**
  * Client tags; a client can carry several. «Vendedor» is gone: an owner whose
@@ -24,6 +25,25 @@ const LETRAS_DNI = "TRWAGMYFPDXBNJZSQVHLCKE";
 /** «12.345.678-z» → «12345678Z». */
 export function normalizarDni(valor: string) {
   return valor.replace(/[\s.\-]/g, "").toUpperCase();
+}
+
+/**
+ * A search that names one person exactly: a valid DNI, or a 9-digit phone in
+ * the usual ways of writing it («612345678», «612 345 678», «612 34 56 78»).
+ * Lets an advisor find a client of another zone to link them (buscarClientes).
+ */
+export function busquedaExacta(q: string): Prisma.ClienteWhereInput | null {
+  if (dniValido(q)) return { dni: normalizarDni(q) };
+  const cifras = q.replace(/[\s.\-]/g, "").replace(/^(\+|00)34/, "");
+  if (!/^\d{9}$/.test(cifras)) return null;
+  const formas = [
+    cifras,
+    `${cifras.slice(0, 3)} ${cifras.slice(3, 6)} ${cifras.slice(6)}`,
+    `${cifras.slice(0, 3)} ${cifras.slice(3, 5)} ${cifras.slice(5, 7)} ${cifras.slice(7)}`,
+    `${cifras.slice(0, 3)}-${cifras.slice(3, 6)}-${cifras.slice(6)}`,
+  ];
+  // endsWith also matches the same number with a +34 in front.
+  return { OR: formas.map((f) => ({ telefono: { endsWith: f } })) };
 }
 
 /** Spanish DNI (8 digits + letter) or NIE (X/Y/Z + 7 digits + letter), with control letter check. */

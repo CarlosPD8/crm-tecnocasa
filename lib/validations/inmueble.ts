@@ -54,6 +54,9 @@ export const inmuebleSchema = z.object({
     .refine((v) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v), "Fecha no válida"),
   // Only directors send it; "" = no advisor. Ignored for advisors (see resolverAsesor).
   asesorId: z.string().optional(),
+  // Only for a loose property (in a block it takes the block's). Required when
+  // creating; only the director changes it (lib/db.ts resolverZona).
+  zonaId: z.string().optional(),
 });
 
 export type InmuebleInput = z.infer<typeof inmuebleSchema>;

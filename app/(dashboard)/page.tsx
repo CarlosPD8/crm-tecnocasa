@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { differenceInCalendarDays, format, isToday, subDays } from "date-fns";
 import { es } from "date-fns/locale";
-import { ArrowUpRight, CalendarCheck, Handshake, Home, KeyRound, PhoneCall, Star } from "lucide-react";
+import { ArrowUpRight, CalendarCheck, Handshake, Home, KeyRound, MapPinned, PhoneCall, Star } from "lucide-react";
 
 import { getContexto } from "@/lib/db";
 import { cn } from "@/lib/utils";
 import { hoyISO } from "@/lib/filtros/tipos";
 import { FinAlquiler } from "@/components/inmuebles/situacion";
 import { PageHeader } from "@/components/shared/page-header";
+import { EmptyState } from "@/components/shared/empty-state";
 import { ProximoContacto } from "@/components/shared/proximo-contacto";
 import {
   TIPO_INMUEBLE_LABELS,
@@ -94,7 +95,7 @@ const selectInmuebleSeguimiento = {
 } as const;
 
 export default async function DashboardPage() {
-  const { db } = await getContexto();
+  const { db, zonas } = await getContexto();
   const ahora = new Date();
   const finDeHoy = new Date(ahora);
   finDeHoy.setHours(23, 59, 59, 999);
@@ -201,6 +202,15 @@ export default async function DashboardPage() {
         }
         description="Resumen de la cartera, seguimiento de clientes y últimos movimientos de la oficina."
       />
+
+      {zonas?.length === 0 && (
+        <EmptyState
+          icon={MapPinned}
+          title="Aún no tienes zona asignada"
+          description="Pídesela al director: hasta entonces no verás pisos ni bloques, solo tus clientes."
+          className="py-8"
+        />
+      )}
 
       {/* Stat band — the actionable number gets the weight, the rest read as context. */}
       <section

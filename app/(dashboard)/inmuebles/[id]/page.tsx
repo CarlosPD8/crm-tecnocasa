@@ -41,6 +41,7 @@ import {
 } from "@/lib/validations/inmueble";
 import { formatBloque } from "@/lib/validations/bloque";
 import { AltaPor } from "@/components/shared/alta-por";
+import { ZonaBadge } from "@/components/zonas/zona-badge";
 
 const formatoPrecio = new Intl.NumberFormat("es-ES", {
   style: "currency",
@@ -61,6 +62,7 @@ export default async function InmuebleDetallePage({
     include: {
       propietario: true,
       bloque: true,
+      zona: { select: { nombre: true, color: true } },
       contactos: {
         orderBy: { fecha: "desc" },
         include: {
@@ -107,6 +109,7 @@ export default async function InmuebleDetallePage({
           <span className="flex flex-wrap items-center gap-2">
             <span className="font-mono tracking-normal normal-case">{inmueble.referencia}</span>
             <CaptacionBadge captacion={inmueble.captacion} />
+            <ZonaBadge zona={inmueble.zona} className="tracking-normal normal-case" />
           </span>
         }
         title={
@@ -223,9 +226,15 @@ export default async function InmuebleDetallePage({
                     >
                       {formatBloque(inmueble.bloque)}
                     </Link>
+                  ) : inmueble.bloqueId ? (
+                    // Its block is in a zone this advisor doesn't work.
+                    <span className="text-muted-foreground">De otra zona</span>
                   ) : (
                     "—"
                   )}
+                </DataItem>
+                <DataItem label="Zona">
+                  <ZonaBadge zona={inmueble.zona} className="text-sm" />
                 </DataItem>
                 <DataItem label="Escalera · planta · puerta">{ubicacion ?? "—"}</DataItem>
                 <DataItem label="Captación">

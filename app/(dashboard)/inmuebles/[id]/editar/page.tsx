@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getContexto, opcionesAsesor } from "@/lib/db";
+import { getContexto, opcionesAsesor, zonasVisibles } from "@/lib/db";
 import { InmuebleForm } from "@/components/inmuebles/inmueble-form";
 import { PageHeader } from "@/components/shared/page-header";
 
@@ -8,21 +8,33 @@ export default async function EditarInmueblePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { db, esDirector } = await getContexto();
+  const ctx = await getContexto();
+  const { db, esDirector } = ctx;
   const { id } = await params;
-  const [inmueble, asesores] = await Promise.all([
+  const [inmueble, asesores, zonas] = await Promise.all([
     db.inmueble.findUnique({
       where: { id },
       include: {
         propietario: true,
-        bloque: { select: { id: true, calle: true, numero: true, localidad: true } },
+        // Null for an advisor when the block is in a zone they don't work.
+        bloque: {
+          select: {
+            id: true,
+            calle: true,
+            numero: true,
+            localidad: true,
+            zona: { select: { id: true, nombre: true, color: true } },
+          },
+        },
+        zona: { select: { nombre: true, color: true } },
       },
     }),
     esDirector ? opcionesAsesor(db) : undefined,
+    zonasVisibles(ctx),
   ]);
 
   if (!inmueble) notFound();
-  const { propietario, bloque, ...datos } = inmueble;
+  const { propietario, bloque, zona, ...datos } = inmueble;
 
   return (
     <div className="flex flex-col gap-8">
@@ -40,6 +52,10 @@ export default async function EditarInmueblePage({
         }
         bloqueInicial={bloque}
         asesores={asesores}
+        zonas={zonas}
+        zonaActual={zona}
+        bloqueAjeno={Boolean(datos.bloqueId && !bloque)}
+        esDirector={esDirector}
       />
     </div>
   );

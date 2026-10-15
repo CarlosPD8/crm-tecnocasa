@@ -13,6 +13,8 @@ export const bloqueSchema = z.object({
   nombre: z.string().optional().or(z.literal("")),
   codigoPostal: z.string().optional().or(z.literal("")),
   notas: z.string().optional().or(z.literal("")),
+  // Required when creating; only the director changes it (lib/db.ts resolverZona).
+  zonaId: z.string().optional(),
 });
 
 export type BloqueInput = z.infer<typeof bloqueSchema>;

@@ -85,6 +85,7 @@ enum EntidadActividad {
   INTERES
   OPERACION
   USUARIO
+  ZONA
 }
 
 enum TipoEvento {
@@ -106,16 +107,18 @@ model Oficina {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  usuarios    Usuario[]
-  clientes    Cliente[]
-  inmuebles   Inmueble[]
-  bloques     Bloque[]
-  contactos   Contacto[]
-  eventos     Evento[]
-  intereses   Interes[]
-  operaciones Operacion[]
-  archivos    Archivo[]
-  actividades Actividad[]
+  usuarios     Usuario[]
+  clientes     Cliente[]
+  inmuebles    Inmueble[]
+  bloques      Bloque[]
+  contactos    Contacto[]
+  eventos      Evento[]
+  intereses    Interes[]
+  operaciones  Operacion[]
+  archivos     Archivo[]
+  actividades  Actividad[]
+  zonas        Zona[]
+  zonaAsesores ZonaAsesor[]
 }
 
 // Perfil de un usuario de Supabase Auth (id = auth.users.id). Nunca se borra:
@@ -137,17 +140,20 @@ model Usuario {
 
   oficina Oficina @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
 
-  clientesCreados    Cliente[]   @relation("ClienteCreadoPor")
-  clientesAsignados  Cliente[]   @relation("ClienteAsesor")
-  inmueblesCreados   Inmueble[]  @relation("InmuebleCreadoPor")
-  inmueblesAsignados Inmueble[]  @relation("InmuebleAsesor")
-  bloquesCreados     Bloque[]    @relation("BloqueCreadoPor")
-  contactosCreados   Contacto[]  @relation("ContactoCreadoPor")
-  eventosCreados     Evento[]    @relation("EventoCreadoPor")
-  operacionesCreadas Operacion[] @relation("OperacionCreadoPor")
-  archivosCreados    Archivo[]   @relation("ArchivoCreadoPor")
-  interesesCreados   Interes[]   @relation("InteresCreadoPor")
-  actividades        Actividad[] @relation("ActividadCreadoPor")
+  clientesCreados    Cliente[]    @relation("ClienteCreadoPor")
+  clientesAsignados  Cliente[]    @relation("ClienteAsesor")
+  inmueblesCreados   Inmueble[]   @relation("InmuebleCreadoPor")
+  inmueblesAsignados Inmueble[]   @relation("InmuebleAsesor")
+  bloquesCreados     Bloque[]     @relation("BloqueCreadoPor")
+  contactosCreados   Contacto[]   @relation("ContactoCreadoPor")
+  eventosCreados     Evento[]     @relation("EventoCreadoPor")
+  operacionesCreadas Operacion[]  @relation("OperacionCreadoPor")
+  archivosCreados    Archivo[]    @relation("ArchivoCreadoPor")
+  interesesCreados   Interes[]    @relation("InteresCreadoPor")
+  actividades        Actividad[]  @relation("ActividadCreadoPor")
+  zonasCreadas       Zona[]       @relation("ZonaCreadoPor")
+  // Zonas que trabaja (solo cuenta para los asesores: el director lo ve todo).
+  zonasAsignadas     ZonaAsesor[]
 
   @@index([oficinaId])
 }
@@ -191,15 +197,19 @@ model Bloque {
   nombre       String?
   codigoPostal String?
   notas        String?
+  // Sus pisos la heredan (trigger Bloque_zona_a_pisos).
+  zonaId       String
   creadoPorId  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   oficina   Oficina    @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
+  zona      Zona       @relation(fields: [zonaId], references: [id], onDelete: Restrict)
   creadoPor Usuario?   @relation("BloqueCreadoPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
   inmuebles Inmueble[]
 
   @@unique([oficinaId, calle, numero, localidad])
+  @@index([oficinaId, zonaId])
   @@index([localidad])
 }
 
@@ -289,6 +299,10 @@ model Inmueble {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
+  // Zona efectiva: la del bloque si está en uno (la copia el trigger
+  // Inmueble_hereda_zona), la propia si es un piso suelto.
+  zonaId String
+
   // Ubicación dentro del bloque. planta es entera para poder ordenar (0 = Bajo).
   bloqueId String?
   escalera String?
@@ -306,6 +320,7 @@ model Inmueble {
   oficina     Oficina     @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
   propietario Cliente?    @relation("PropietarioInmueble", fields: [propietarioId], references: [id], onDelete: Restrict)
   bloque      Bloque?     @relation(fields: [bloqueId], references: [id], onDelete: Restrict)
+  zona        Zona        @relation(fields: [zonaId], references: [id], onDelete: Restrict)
   asesor      Usuario?    @relation("InmuebleAsesor", fields: [asesorId], references: [id], onDelete: SetNull)
   creadoPor   Usuario?    @relation("InmuebleCreadoPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
   archivos    Archivo[]
@@ -320,6 +335,7 @@ model Inmueble {
   @@index([oficinaId, fechaFinAlquiler])
   @@index([oficinaId, fechaProximoContacto])
   @@index([oficinaId, captacion])
+  @@index([oficinaId, zonaId])
   @@index([bloqueId])
   @@index([bloqueId, escalera, planta, puerta])
   @@index([ocupacion])
@@ -428,4 +444,42 @@ model Actividad {
 
   @@index([oficinaId, dia])
   @@index([oficinaId, creadoPorId, dia])
+}
+
+// Subzona de la oficina. Cada bloque y cada piso suelto está en una, y cada
+// asesor trabaja las suyas: solo ve sus pisos y bloques (lib/zonas.ts).
+// Solo el director crea, cambia y borra zonas y reparte a los asesores.
+model Zona {
+  id          String   @id @default(cuid())
+  oficinaId   String   @default(dbgenerated("crm_sin_oficina()"))
+  nombre      String
+  // Clave de la paleta fija de lib/validations/zona.ts.
+  color       String
+  notas       String?
+  creadoPorId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  oficina   Oficina      @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
+  creadoPor Usuario?     @relation("ZonaCreadoPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  asesores  ZonaAsesor[]
+  bloques   Bloque[]
+  inmuebles Inmueble[]
+
+  @@unique([oficinaId, nombre])
+}
+
+// Qué asesores trabajan cada zona (muchos a muchos). Tabla explícita para que
+// lleve oficinaId como las demás y la extensión de ámbito la acote.
+model ZonaAsesor {
+  oficinaId String @default(dbgenerated("crm_sin_oficina()"))
+  zonaId    String
+  usuarioId String
+
+  oficina Oficina @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
+  zona    Zona    @relation(fields: [zonaId], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@id([zonaId, usuarioId])
+  @@index([oficinaId, usuarioId])
 }

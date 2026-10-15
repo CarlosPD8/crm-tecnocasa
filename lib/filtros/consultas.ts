@@ -141,6 +141,8 @@ export function consultaInmuebles(sp: SP) {
   if (estados.length) and.push({ estado: { in: estados as (keyof typeof ESTADO_INMUEBLE_LABELS)[] } });
   const tipos = leerMulti(sp.tipoInmueble, claves(TIPO_INMUEBLE_LABELS));
   if (tipos.length) and.push({ tipoInmueble: { in: tipos as (keyof typeof TIPO_INMUEBLE_LABELS)[] } });
+  const zonas = leerMulti(sp.zona);
+  if (zonas.length) and.push({ zonaId: { in: zonas } });
   const localidades = leerMulti(sp.localidad);
   if (localidades.length) and.push({ localidad: { in: localidades } });
   const ocup = ocupacion(sp.ocupacion);
@@ -220,6 +222,8 @@ export function consultaInmuebles(sp: SP) {
 export function consultaBloques(sp: SP) {
   const and: Prisma.BloqueWhereInput[] = [];
 
+  const zonas = leerMulti(sp.zona);
+  if (zonas.length) and.push({ zonaId: { in: zonas } });
   const localidades = leerMulti(sp.localidad);
   if (localidades.length) and.push({ localidad: { in: localidades } });
   if (sp.cp?.trim()) and.push({ codigoPostal: contiene(sp.cp) });

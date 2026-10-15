@@ -9,6 +9,8 @@ import { ROL_LABELS } from "@/lib/validations/usuario";
 import type { RolUsuario } from "@/lib/generated/prisma/enums";
 import { EditarUsuarioDialog, type UsuarioEditable } from "@/components/equipo/usuario-dialog";
 import { RestablecerPasswordDialog } from "@/components/equipo/password-dialog";
+import { ZonaBadge } from "@/components/zonas/zona-badge";
+import type { OpcionZona } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -47,6 +49,7 @@ export type MiembroEquipo = {
   esYo: boolean;
   clientes: number;
   inmuebles: number;
+  zonas: OpcionZona[];
 };
 
 function Estado({ miembro }: { miembro: MiembroEquipo }) {
@@ -55,7 +58,7 @@ function Estado({ miembro }: { miembro: MiembroEquipo }) {
   return <Badge>Activo</Badge>;
 }
 
-export function EquipoTable({ miembros }: { miembros: MiembroEquipo[] }) {
+export function EquipoTable({ miembros, zonas }: { miembros: MiembroEquipo[]; zonas: OpcionZona[] }) {
   const [editando, setEditando] = useState<UsuarioEditable | null>(null);
   const [restableciendo, setRestableciendo] = useState<MiembroEquipo | null>(null);
   const [desactivando, setDesactivando] = useState<MiembroEquipo | null>(null);
@@ -82,6 +85,7 @@ export function EquipoTable({ miembros }: { miembros: MiembroEquipo[] }) {
             <TableRow>
               <TableHead>Persona</TableHead>
               <TableHead>Rol</TableHead>
+              <TableHead>Zonas</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead className="text-right">Clientes</TableHead>
               <TableHead className="text-right">Inmuebles</TableHead>
@@ -109,6 +113,19 @@ export function EquipoTable({ miembros }: { miembros: MiembroEquipo[] }) {
                 </TableCell>
                 <TableCell>{ROL_LABELS[m.rol]}</TableCell>
                 <TableCell>
+                  {m.rol === "DIRECTOR" ? (
+                    <span className="text-xs text-muted-foreground">Todas</span>
+                  ) : m.zonas.length ? (
+                    <span className="flex flex-wrap gap-x-3 gap-y-1">
+                      {m.zonas.map((z) => (
+                        <ZonaBadge key={z.id} zona={z} />
+                      ))}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-destructive">Sin zona</span>
+                  )}
+                </TableCell>
+                <TableCell>
                   <Estado miembro={m} />
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{m.clientes}</TableCell>
@@ -122,8 +139,12 @@ export function EquipoTable({ miembros }: { miembros: MiembroEquipo[] }) {
                       <MoreHorizontal className="size-4" />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-56">
-                      <DropdownMenuItem onClick={() => setEditando({ id: m.id, nombre: m.nombre, rol: m.rol, esYo: m.esYo })}>
-                        <Pencil /> Editar nombre y rol
+                      <DropdownMenuItem
+                        onClick={() =>
+                          setEditando({ id: m.id, nombre: m.nombre, rol: m.rol, esYo: m.esYo, zonaIds: m.zonas.map((z) => z.id) })
+                        }
+                      >
+                        <Pencil /> Editar nombre, rol y zonas
                       </DropdownMenuItem>
                       {!m.esYo && (
                         <>
@@ -151,7 +172,7 @@ export function EquipoTable({ miembros }: { miembros: MiembroEquipo[] }) {
         </Table>
       </div>
 
-      <EditarUsuarioDialog usuario={editando} onClose={() => setEditando(null)} />
+      <EditarUsuarioDialog usuario={editando} zonas={zonas} onClose={() => setEditando(null)} />
       <RestablecerPasswordDialog persona={restableciendo} onClose={() => setRestableciendo(null)} />
 
       <AlertDialog open={desactivando !== null} onOpenChange={(open) => !open && setDesactivando(null)}>

@@ -15,7 +15,7 @@ Estado de cada punto:
 |---|---|---|---|---|
 | 1 | Marca «Noticia» | Hecho y desplegado (14/10/2026) | ½ día | — |
 | 2 | Registro de actividad | Hecho y migrado; falta desplegar | 2–3 días | — |
-| 3 | Subzonas dentro de la oficina | Pendiente del cliente | 2–3 días | — |
+| 3 | Subzonas dentro de la oficina | Hecho; falta migrar y desplegar | 5,5–6,5 días | — |
 | 4 | Registrar solo desde la zona o la oficina (ubicación) | Pendiente del cliente | ~3,5 días | 2 y 3 |
 | 5 | Exportar a PDF apaisado | Hecho; falta desplegar | 1 día | — |
 | — | Importador de Excel | Necesario antes del piloto | por estimar | su Excel real |
@@ -105,23 +105,41 @@ La migración ya está aplicada en producción (14/10/2026): solo falta el push 
 
 ## 3. Subzonas dentro de la oficina
 
-**Qué piden.** Dividir la zona de la oficina en subzonas, organizar los pisos por subzona y que cada asesor se ocupe de la suya.
+**Estado (15/10/2026): implementado; falta aplicar la migración y desplegar.** La estimación pasó de 2–3 días a 5,5–6,5 días: el cliente pidió que cada asesor vea **solo** sus zonas (también los clientes), y eso es una capa de seguridad nueva, no solo organizar. Lo hecho:
 
-**Propuesta.**
+- **Datos:** `Zona` (nombre, color de una paleta fija, notas) y `ZonaAsesor` (muchos a muchos). `Bloque.zonaId` e `Inmueble.zonaId` son obligatorios. El de un piso es su zona efectiva: si está en un bloque, el trigger `Inmueble_hereda_zona` le pone la del bloque, y `Bloque_zona_a_pisos` se la cambia cuando cambia la del bloque. Ambos tienen el trigger `crm_misma_oficina`, como las demás FKs.
+- **Visibilidad**, en el servidor, en la misma extensión que aísla las oficinas (`lib/zonas.ts` y `lib/ambito-oficina.ts`). El director lo ve todo. El asesor ve:
+  - los pisos de sus zonas y los que lleva como asesor responsable;
+  - los bloques de sus zonas;
+  - sus clientes y los enlazados a un piso que ve (propietario, interesado, comprador o contactado sobre él);
+  - los contactos, archivos, interesados y operaciones de todo eso;
+  - las citas que creó él y las que no enlazan a nada que no vea.
 
-- **Modelo `Zona`** por oficina:
-  - nombre;
-  - forma dibujada en un mapa, necesaria para el punto 4;
-  - asesores asignados.
-- **Asignación:** la zona va en el **bloque**, porque un portal está en una sola zona, y los pisos la heredan. Los pisos sueltos, sin bloque, llevan su zona directamente. La asignación es manual; asignar solo por calle necesitaría un callejero y queda para más adelante.
-- **Clientes:** sin zona, compartidos por toda la oficina como ahora. Un comprador busca en cualquier sitio y un propietario puede tener pisos en varias zonas.
-- **Filtros por zona** en inmuebles y bloques, y un panel de inicio que por defecto muestre «mi zona».
-- **Pantalla de gestión de zonas** para el director (crear, dibujar, asignar asesores).
-- **Seguridad:** las FKs nuevas (`zonaId`) necesitan su trigger `crm_misma_oficina` y tests de aislamiento, como el resto.
+  Sin zona asignada, no ve pisos ni bloques. Lo que no ve no existe: su URL da «no encontrado», y también se filtran los `include` de cada ficha.
+- **Cliente que ya existe y es de otro asesor:** escribiendo su DNI o teléfono exactos en el buscador de clientes aparece marcado «De otro asesor»; al enlazarlo a su piso (propietario, interesado, contacto u operación) pasa a verlo.
+- **Solo el director** crea, edita y borra zonas, asigna asesores (en Zonas o en Equipo) y cambia la zona de un bloque o de un piso suelto. Al borrar una zona elige a cuál pasan sus bloques y pisos. Un asesor solo puede meter un piso en un bloque de su misma zona.
+- **Pantallas:** menú «Zonas» (tarjetas con asesores, bloques, pisos, noticias y potenciales, «Ver pisos» y «Hoja para la calle»), insignia de color en fichas y listas, columna y filtro «Zona» en inmuebles y bloques, zona en los formularios, columna «Zonas» en Equipo, y aviso «Aún no tienes zona asignada» para un asesor sin zonas.
+- **PDF:** el botón PDF de Inmuebles ofrece «Lista» y «**Hoja para la calle**»: los pisos filtrados, agrupados por bloque (calle, escalera, planta y puerta), con hueco para notas. Es la hoja de zona que pedían (filtrando por zona) y sirve para cualquier selección. Máximo 3.000 pisos por PDF. Zona en los PDF y Excel de inmuebles y bloques.
+- **Registro de actividad:** altas, cambios y borrados de zonas, y los cambios de zona de bloques, pisos y asesores.
+- **Oficinas nuevas** (`scripts/alta-oficina.ts`): empiezan con la zona «General».
+- **Rendimiento:** con 2.500 pisos, la lista de clientes de un asesor tarda unos 5 ms.
 
-**Preguntas abiertas para el cliente.**
-1. ¿Una zona puede tener varios asesores? ¿Un asesor puede llevar varias zonas?
-2. ¿Qué pasa con los pisos que aún no tienen zona asignada?
+**Despliegue, en este orden:**
+1. `npx prisma migrate deploy` (migración `zonas_expand`). Crea una zona «General» por oficina con todos sus bloques, pisos y asesores, así que nadie pierde acceso.
+2. **Push a Vercel justo después.** Hasta entonces, el `next dev` local falla, y la versión desplegada no sabe leer la actividad de zonas.
+3. En Demo, `SEED_CONFIRMAR=demo npx prisma db seed`: crea «Zaidín», «Centro» y «Albaicín-Realejo» y reparte los pisos (opcional).
+4. Cuando no quede nada sin zona, mover `prisma/pendiente/20261015090100_zonas_contract` a `prisma/migrations/` y `npx prisma migrate deploy` (hace `zonaId` obligatorio en la base de datos).
+
+**Qué piden.** Dividir la zona de la oficina en subzonas, organizar los pisos por subzona y que cada asesor se ocupe de la suya. Sus Excel ya vienen así: un archivo por zona (ejemplo: `docs/+ PAJARITOS - BORRADO.xlsx`).
+
+**Preguntas al cliente (respondidas el 15/10/2026).**
+1. ¿Una zona puede tener varios asesores? ¿Un asesor puede llevar varias zonas? **Sí a las dos.**
+2. ¿Qué pasa con los pisos que aún no tienen zona? **No hay pisos sin zona.**
+3. ¿Qué ve un asesor? **Solo sus zonas**, también en clientes (los de sus pisos). Sin zona asignada, nada hasta que se la asignen. Si es el asesor responsable de un piso de otra zona, lo sigue viendo.
+4. ¿Quién gestiona las zonas? **Solo el director**, una a una (sin movimientos en bloque).
+5. ¿Clientes repetidos entre zonas? **Enlazarlos por DNI o teléfono.**
+6. ¿Hoja de zona en PDF? Filtran los pisos con los que van a trabajar y los imprimen en un solo PDF: la «Hoja para la calle».
+7. ¿Mapa? **Más adelante**, con el punto 4 (se añadirá `Zona.forma`).
 
 ---
 
@@ -155,7 +173,7 @@ La migración ya está aplicada en producción (14/10/2026): solo falta el push 
 - **A. Registrar sin bloquear:** guardar la ubicación y marcar «registrado fuera de zona» para el director.
 - **B. Bloquear solo lo de calle:** exigir estar a menos de 100–150 m del bloque solo para visitas, pisos nuevos y noticias.
 
-**Esfuerzo aproximado.** Las zonas con su dibujo en el mapa se cuentan en el punto 3.
+**Esfuerzo aproximado.** Las zonas ya existen (punto 3), pero falta su forma: dibujar el polígono de cada zona en un mapa (`Zona.forma`) va aquí, con ~1 día más.
 
 | Parte | Días |
 |---|---|
@@ -167,7 +185,7 @@ La migración ya está aplicada en producción (14/10/2026): solo falta el push 
 1. ¿Se bloquea **todo** lo que sea registrar o modificar, o solo algunas acciones?
 2. ¿Tienen ordenador fijo en la oficina? ¿Va por cable o por Wi-Fi?
 3. ¿Quieren permisos temporales para trabajar fuera de zona?
-4. ¿Cada asesor tiene una sola zona, o alguno puede llevar varias?
+4. ~~¿Cada asesor tiene una sola zona, o alguno puede llevar varias?~~ Respondida en el punto 3: puede llevar varias.
 5. ¿Los asesores son empleados o autónomos? ¿Lo han consultado con su asesoría?
 
 ---
@@ -179,7 +197,8 @@ La migración ya está aplicada en producción (14/10/2026): solo falta el push 
 - Botón **PDF** en Inmuebles, Clientes y Bloques, con la lista tal como esté filtrada, y **Hoja en PDF** en la ficha de cada bloque, piso por piso con una columna de notas para escribir a mano.
 - Lo puede sacar **cualquier asesor** (el Excel sigue siendo solo del director). Se abre en una pestaña nueva y desde ahí se imprime o se guarda.
 - Columnas: inmuebles (referencia, dirección, bloque, captación, estado, propietario, teléfono, último y próximo contacto); clientes (nombre, etiquetas, teléfono, email, dirección, asesor, último y próximo contacto); bloques (recuentos de ocupación, noticias y potenciales); hoja del bloque (piso, ocupación, captación, estado, propietario, teléfono, último y próximo contacto, notas).
-- Cabecera con la oficina, la fecha y los filtros; totales al final; «Página X de Y» en el pie. Máximo 2.000 filas.
+- Cabecera con la oficina, la fecha y los filtros; totales al final; «Página X de Y» en el pie. Máximo 3.000 filas.
+- Con el punto 3 llegó la **Hoja para la calle** de cualquier selección de pisos (por ejemplo, una zona entera), agrupada por bloque.
 - Hecho con `pdf-lib` en `lib/pdf/` (JavaScript puro, sin navegador ni archivos de fuentes). Las fuentes estándar no tienen emojis: salen como «?».
 
 **Qué piden.** Además del Excel, exportar a PDF en horizontal «como una factura».

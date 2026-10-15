@@ -1,6 +1,7 @@
 // Datos de demostración (Granada capital) de la oficina «Demo» (ofi_demo). BORRA
-// sus bloques, clientes, inmuebles, contactos, intereses, operaciones, eventos y
-// registros de archivos antes de insertar. Las demás oficinas no se tocan: todo
+// sus zonas, bloques, clientes, inmuebles, contactos, intereses, operaciones,
+// eventos y registros de archivos antes de insertar (los asesores conservan sus
+// zonas si se llaman igual). Las demás oficinas no se tocan: todo
 // pasa por la misma extensión de ámbito que usa la app (lib/ambito-oficina.ts).
 // Uso: SEED_CONFIRMAR=demo npx prisma db seed
 //
@@ -60,6 +61,21 @@ function dia(dias: number, hora = 10, minuto = 0) {
   const d = new Date(Date.now() + dias * DAY);
   d.setHours(hora, minuto, 0, 0);
   return d;
+}
+
+// ─── Zonas ───────────────────────────────────────────────────────────────────
+
+const ZONAS = [
+  { nombre: "Zaidín", color: "verde", notas: "Zaidín, Genil y la Vega." },
+  { nombre: "Centro", color: "azul", notas: "Centro, Ronda, Beiro y el norte." },
+  { nombre: "Albaicín-Realejo", color: "teja", notas: "Barrios históricos: Albaicín y Realejo." },
+] as const;
+
+/** Zona de cada barrio de la demo. */
+function zonaDe(localidad: string) {
+  if (/Zaidín|Genil|Vega/.test(localidad)) return "Zaidín";
+  if (/Albaicín|Realejo/.test(localidad)) return "Albaicín-Realejo";
+  return "Centro";
 }
 
 // ─── Bloques ─────────────────────────────────────────────────────────────────
@@ -547,6 +563,8 @@ async function main() {
   // La app nunca borra actividad (la extensión de ámbito no lo permite): aquí
   // sí, con el cliente sin ámbito y solo la de Demo.
   await base.actividad.deleteMany({ where: { oficinaId: OFICINA_DEMO } });
+  // Los asesores conservan sus zonas si siguen existiendo con el mismo nombre.
+  const asignadas = await prisma.zonaAsesor.findMany({ select: { usuarioId: true, zona: { select: { nombre: true } } } });
   // Orden por claves foráneas: primero lo que depende de clientes, inmuebles y bloques.
   await prisma.$transaction([
     prisma.evento.deleteMany(),
@@ -557,12 +575,27 @@ async function main() {
     prisma.inmueble.deleteMany(),
     prisma.bloque.deleteMany(),
     prisma.cliente.deleteMany(),
+    prisma.zona.deleteMany(),
   ]);
+
+  console.log("Creando zonas…");
+  const zonaId = new Map<string, string>();
+  for (const [i, z] of ZONAS.entries()) {
+    const zona = await prisma.zona.create({ data: { ...z, createdAt: dia(-170 + i, 9, 30) } });
+    zonaId.set(z.nombre, zona.id);
+  }
+  // Los demás (p. ej. los que tenían la zona «General» de la migración), al Zaidín.
+  const asesores = await prisma.usuario.findMany({ where: { rol: "ASESOR", activo: true }, select: { id: true } });
+  const reparto = asesores.flatMap(({ id }) => {
+    const suyas = asignadas.filter((a) => a.usuarioId === id && zonaId.has(a.zona.nombre)).map((a) => a.zona.nombre);
+    return (suyas.length ? suyas : ["Zaidín"]).map((nombre) => ({ zonaId: zonaId.get(nombre)!, usuarioId: id }));
+  });
+  if (reparto.length) await prisma.zonaAsesor.createMany({ data: reparto });
 
   console.log("Creando bloques…");
   const bloqueId = new Map<string, string>();
   for (const { key, ...data } of BLOQUES) {
-    const bloque = await prisma.bloque.create({ data });
+    const bloque = await prisma.bloque.create({ data: { ...data, zonaId: zonaId.get(zonaDe(data.localidad))! } });
     bloqueId.set(key, bloque.id);
   }
 
@@ -606,6 +639,8 @@ async function main() {
         estado: inm.estado,
         propietarioId: inm.propietario ? clienteId.get(inm.propietario)! : null,
         bloqueId: inm.bloque ? bloqueId.get(inm.bloque)! : null,
+        // En un bloque, el trigger pone la del bloque (que es la misma).
+        zonaId: zonaId.get(zonaDe(inm.localidad))!,
         escalera: inm.escalera ?? null,
         planta: inm.planta ?? null,
         puerta: inm.puerta ?? null,
@@ -703,8 +738,9 @@ async function main() {
   console.log("Creando actividad…");
   await crearActividadDemo();
 
-  const [bloques, clientes, inmuebles, contactosTotal, deInmueble, potenciales, noticias, intereses, operaciones, eventos, actividad] =
+  const [zonas, bloques, clientes, inmuebles, contactosTotal, deInmueble, potenciales, noticias, intereses, operaciones, eventos, actividad] =
     await Promise.all([
+      prisma.zona.count(),
       prisma.bloque.count(),
       prisma.cliente.count(),
       prisma.inmueble.count(),
@@ -718,6 +754,8 @@ async function main() {
       prisma.actividad.count(),
     ]);
   console.log({
+    zonas,
+    asesoresConZona: reparto.length,
     bloques,
     clientes,
     inmuebles,
@@ -740,7 +778,8 @@ async function main() {
  */
 async function crearActividadDemo() {
   const nombre = (p: { nombre: string; apellidos: string } | null) => (p ? `${p.nombre} ${p.apellidos}` : null);
-  const [clientes, inmuebles, bloques, contactos, operaciones] = await Promise.all([
+  const [zonas, clientes, inmuebles, bloques, contactos, operaciones] = await Promise.all([
+    prisma.zona.findMany({ select: { id: true, nombre: true, createdAt: true } }),
     prisma.cliente.findMany({ select: { id: true, nombre: true, apellidos: true, createdAt: true } }),
     prisma.inmueble.findMany({
       select: { id: true, referencia: true, direccion: true, bloqueId: true, estado: true, createdAt: true },
@@ -761,6 +800,10 @@ async function crearActividadDemo() {
   ]);
 
   const lineas: { fecha: Date; linea: NuevaActividad }[] = [
+    ...zonas.map((z) => ({
+      fecha: z.createdAt,
+      linea: { accion: "ALTA" as const, entidad: "ZONA" as const, entidadId: z.id, enlace: "/zonas", resumen: frase.altaZona(z.nombre) },
+    })),
     // Un bloque se da de alta justo antes que su primer piso.
     ...bloques.map((b) => {
       const pisos = inmuebles.filter((i) => i.bloqueId === b.id).map((i) => i.createdAt.getTime());

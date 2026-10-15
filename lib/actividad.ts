@@ -5,11 +5,12 @@ import type {
   EntidadActividad,
   TipoOperacion,
 } from "@/lib/generated/prisma/enums";
-import type { Bloque, Cliente, Evento, Inmueble } from "@/lib/generated/prisma/client";
+import type { Bloque, Cliente, Evento, Inmueble, Zona } from "@/lib/generated/prisma/client";
 import { hoyISO } from "@/lib/filtros/tipos";
 import { formatBloque } from "@/lib/validations/bloque";
 import { ordenarEtiquetas, TIPO_CLIENTE_LABELS } from "@/lib/validations/cliente";
 import { TIPO_EVENTO_LABELS } from "@/lib/validations/evento";
+import { colorZona } from "@/lib/validations/zona";
 import {
   captacionLabel,
   ESTADO_INMUEBLE_LABELS,
@@ -105,6 +106,11 @@ export const frase = {
   altaCliente: (nombre: string) => `Dio de alta a ${nombre}`,
   altaInmueble: (referencia: string, direccion: string) => `Dio de alta ${referencia} · ${direccion}`,
   altaBloque: (bloque: string) => `Dio de alta el bloque ${bloque}`,
+  altaZona: (nombre: string) => `Creó la zona «${nombre}»`,
+  bajaZona: (nombre: string, destino: string, movidos: { bloques: number; pisos: number }) =>
+    movidos.bloques + movidos.pisos > 0
+      ? `Borró la zona «${nombre}»; sus bloques y pisos pasan a «${destino}»`
+      : `Borró la zona «${nombre}»`,
   contacto(con: string | null, sobre: string | null, proximo?: Date | null) {
     const base =
       con && sobre
@@ -127,7 +133,8 @@ export const frase = {
     if (cambios.length === 1) {
       const [c] = cambios;
       const campo = `${c.articulo ? `${c.articulo} ` : ""}${c.campo.toLowerCase()}`;
-      return `Cambió ${campo} de ${que}: ${c.antes ?? "—"} → ${c.despues ?? "—"}`;
+      const de = que.startsWith("el ") ? `del ${que.slice(3)}` : `de ${que}`;
+      return `Cambió ${campo} ${de}: ${c.antes ?? "—"} → ${c.despues ?? "—"}`;
     }
     return `Editó ${que}: ${enumerar(cambios.map((c) => c.campo.toLowerCase()))}`;
   },
@@ -156,12 +163,14 @@ const conUnidad = (n: number | null, unidad = "") => (n === null ? null : `${n}$
 export const incluirCambiosInmueble = {
   propietario: { select: { nombre: true, apellidos: true } },
   bloque: { select: { calle: true, numero: true } },
+  zona: { select: { nombre: true } },
   asesor: { select: { nombre: true } },
 } as const;
 
 type InmuebleCambios = Inmueble & {
   propietario: { nombre: string; apellidos: string } | null;
   bloque: { calle: string; numero: string } | null;
+  zona: { nombre: string };
   asesor: { nombre: string } | null;
 };
 
@@ -170,6 +179,7 @@ const CAMPOS_INMUEBLE: Campo<InmuebleCambios>[] = [
   ["Dirección", "la", (i) => i.direccion],
   ["Localidad", "la", (i) => i.localidad],
   ["Bloque", "el", (i) => (i.bloque ? formatBloque(i.bloque) : null)],
+  ["Zona", "la", (i) => i.zona.nombre],
   ["Escalera, planta y puerta", "la", (i) => formatUbicacion(i)],
   ["Tipo", "el", (i) => TIPO_INMUEBLE_LABELS[i.tipoInmueble]],
   ["Operación", "la", (i) => TIPO_OPERACION_LABELS[i.tipoOperacion]],
@@ -232,23 +242,69 @@ export function cambioCliente(antes: ClienteCambios, despues: ClienteCambios): N
   };
 }
 
-const CAMPOS_BLOQUE: Campo<Bloque>[] = [
+export const incluirCambiosBloque = { zona: { select: { nombre: true } } } as const;
+
+type BloqueCambios = Bloque & { zona: { nombre: string } };
+
+const CAMPOS_BLOQUE: Campo<BloqueCambios>[] = [
   ["Calle y número", "la", (b) => formatBloque(b)],
   ["Localidad", "la", (b) => b.localidad],
   ["Nombre", "el", (b) => b.nombre],
   ["Código postal", "el", (b) => b.codigoPostal],
+  ["Zona", "la", (b) => b.zona.nombre],
   ["Notas", "las", (b) => recortar(b.notas)],
 ];
 
-export function cambioBloque(antes: Bloque, despues: Bloque): NuevaActividad | null {
+/** `pisos`: how many flats the block has; they follow it when its zone changes. */
+export function cambioBloque(antes: BloqueCambios, despues: BloqueCambios, pisos = 0): NuevaActividad | null {
   const cambios = comparar(CAMPOS_BLOQUE, antes, despues);
   if (!cambios.length) return null;
+  const arrastre =
+    antes.zonaId !== despues.zonaId && pisos > 0
+      ? ` · ${pisos === 1 ? "su piso pasa" : `sus ${pisos} pisos pasan`} también a «${despues.zona.nombre}»`
+      : "";
   return {
     accion: "CAMBIO",
     entidad: "BLOQUE",
     entidadId: despues.id,
     enlace: `/bloques/${despues.id}`,
-    resumen: frase.cambio(`el bloque ${formatBloque(despues)}`, cambios),
+    resumen: frase.cambio(`el bloque ${formatBloque(despues)}`, cambios) + arrastre,
+    cambios: guardar(cambios),
+  };
+}
+
+export const incluirCambiosZona = {
+  asesores: { select: { usuario: { select: { nombre: true } } } },
+} as const;
+
+type ZonaCambios = Zona & { asesores: { usuario: { nombre: string } }[] };
+
+/** «Ana, Bea»: the advisors of a zone, by name. */
+export function nombresAsesores(z: { asesores: { usuario: { nombre: string } }[] }) {
+  return (
+    z.asesores
+      .map((a) => a.usuario.nombre)
+      .sort((a, b) => a.localeCompare(b, "es"))
+      .join(", ") || null
+  );
+}
+
+const CAMPOS_ZONA: Campo<ZonaCambios>[] = [
+  ["Nombre", "el", (z) => z.nombre],
+  ["Color", "el", (z) => colorZona(z.color).label],
+  ["Notas", "las", (z) => recortar(z.notas)],
+  ["Asesores", "los", nombresAsesores],
+];
+
+export function cambioZona(antes: ZonaCambios, despues: ZonaCambios): NuevaActividad | null {
+  const cambios = comparar(CAMPOS_ZONA, antes, despues);
+  if (!cambios.length) return null;
+  return {
+    accion: "CAMBIO",
+    entidad: "ZONA",
+    entidadId: despues.id,
+    enlace: "/zonas",
+    resumen: frase.cambio(`la zona «${despues.nombre}»`, cambios),
     cambios: guardar(cambios),
   };
 }

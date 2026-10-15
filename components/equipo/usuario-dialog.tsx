@@ -11,6 +11,8 @@ import { ROL_DESCRIPCION, ROL_LABELS } from "@/lib/validations/usuario";
 import type { RolUsuario } from "@/lib/generated/prisma/enums";
 import { Field, Segmented } from "@/components/shared/form";
 import { Credenciales, PasswordTemporalInput } from "@/components/equipo/credenciales";
+import { SelectorMultiple } from "@/components/zonas/selector-multiple";
+import type { OpcionZona } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -41,7 +43,32 @@ function RolField({ value, onChange, error }: { value: RolUsuario; onChange: (v:
   );
 }
 
-export function NuevoUsuarioButton() {
+/** Only for advisors: a director sees every zone. */
+function ZonasField({
+  zonas,
+  value,
+  onChange,
+  error,
+}: {
+  zonas: OpcionZona[];
+  value: string[];
+  onChange: (ids: string[]) => void;
+  error?: string;
+}) {
+  return (
+    <Field label="Zonas" error={error} hint="Solo verá los pisos y bloques de estas zonas, y los clientes de esos pisos.">
+      <SelectorMultiple
+        etiqueta="Zonas"
+        opciones={zonas.map((z) => ({ id: z.id, label: z.nombre, color: z.color }))}
+        value={value}
+        onChange={onChange}
+        vacio="Aún no hay zonas. Créalas en Zonas."
+      />
+    </Field>
+  );
+}
+
+export function NuevoUsuarioButton({ zonas }: { zonas: OpcionZona[] }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -50,17 +77,18 @@ export function NuevoUsuarioButton() {
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
-          {open && <NuevoUsuarioForm onClose={() => setOpen(false)} />}
+          {open && <NuevoUsuarioForm zonas={zonas} onClose={() => setOpen(false)} />}
         </DialogContent>
       </Dialog>
     </>
   );
 }
 
-function NuevoUsuarioForm({ onClose }: { onClose: () => void }) {
+function NuevoUsuarioForm({ zonas, onClose }: { zonas: OpcionZona[]; onClose: () => void }) {
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
   const [rol, setRol] = useState<RolUsuario>("ASESOR");
+  const [zonaIds, setZonaIds] = useState<string[]>([]);
   const [password, setPassword] = useState(generarPasswordTemporal);
   const [errores, setErrores] = useState<Errores>({});
   const [creado, setCreado] = useState<{ email: string; password: string } | null>(null);
@@ -69,7 +97,7 @@ function NuevoUsuarioForm({ onClose }: { onClose: () => void }) {
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     startTransition(async () => {
-      const result = await crearUsuario({ nombre, email, rol, password });
+      const result = await crearUsuario({ nombre, email, rol, password, zonaIds: rol === "ASESOR" ? zonaIds : [] });
       if (!result.success) {
         setErrores(result.error);
         return;
@@ -99,8 +127,7 @@ function NuevoUsuarioForm({ onClose }: { onClose: () => void }) {
       <DialogHeader>
         <DialogTitle>Añadir persona</DialogTitle>
         <DialogDescription>
-          Tendrá acceso a todos los datos de la oficina. Entrará con una contraseña temporal y el CRM le pedirá
-          cambiarla.
+          Entrará con una contraseña temporal y el CRM le pedirá cambiarla.
         </DialogDescription>
       </DialogHeader>
 
@@ -125,6 +152,7 @@ function NuevoUsuarioForm({ onClose }: { onClose: () => void }) {
         />
       </Field>
       <RolField value={rol} onChange={setRol} error={errores.rol?.[0]} />
+      {rol === "ASESOR" && <ZonasField zonas={zonas} value={zonaIds} onChange={setZonaIds} error={errores.zonaIds?.[0]} />}
       <Field
         label="Contraseña temporal"
         htmlFor="u-password"
@@ -148,35 +176,46 @@ function NuevoUsuarioForm({ onClose }: { onClose: () => void }) {
   );
 }
 
-export type UsuarioEditable = { id: string; nombre: string; rol: RolUsuario; esYo: boolean };
+export type UsuarioEditable = { id: string; nombre: string; rol: RolUsuario; esYo: boolean; zonaIds: string[] };
 
 export function EditarUsuarioDialog({
   usuario,
+  zonas,
   onClose,
 }: {
   usuario: UsuarioEditable | null;
+  zonas: OpcionZona[];
   onClose: () => void;
 }) {
   return (
     <Dialog open={usuario !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        {usuario && <EditarUsuarioForm usuario={usuario} onClose={onClose} />}
+      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-md">
+        {usuario && <EditarUsuarioForm usuario={usuario} zonas={zonas} onClose={onClose} />}
       </DialogContent>
     </Dialog>
   );
 }
 
-function EditarUsuarioForm({ usuario, onClose }: { usuario: UsuarioEditable; onClose: () => void }) {
+function EditarUsuarioForm({
+  usuario,
+  zonas,
+  onClose,
+}: {
+  usuario: UsuarioEditable;
+  zonas: OpcionZona[];
+  onClose: () => void;
+}) {
   const router = useRouter();
   const [nombre, setNombre] = useState(usuario.nombre);
   const [rol, setRol] = useState<RolUsuario>(usuario.rol);
+  const [zonaIds, setZonaIds] = useState<string[]>(usuario.zonaIds);
   const [errores, setErrores] = useState<Errores>({});
   const [isPending, startTransition] = useTransition();
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     startTransition(async () => {
-      const result = await editarUsuario(usuario.id, { nombre, rol });
+      const result = await editarUsuario(usuario.id, { nombre, rol, zonaIds: rol === "ASESOR" ? zonaIds : [] });
       if (!result.success) {
         setErrores(result.error);
         return;
@@ -202,6 +241,7 @@ function EditarUsuarioForm({ usuario, onClose }: { usuario: UsuarioEditable; onC
         <Input id="e-nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} aria-invalid={!!errores.nombre} />
       </Field>
       <RolField value={rol} onChange={setRol} error={errores.rol?.[0]} />
+      {rol === "ASESOR" && <ZonasField zonas={zonas} value={zonaIds} onChange={setZonaIds} error={errores.zonaIds?.[0]} />}
       <ErrorGeneral errores={errores} />
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>

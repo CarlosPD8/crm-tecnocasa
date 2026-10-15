@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cambioInmueble, cuandoEvento, diaDe, euros, frase } from "@/lib/actividad";
+import { cambioBloque, cambioInmueble, cambioZona, cuandoEvento, diaDe, euros, frase } from "@/lib/actividad";
 import { consultaActividad } from "@/lib/filtros/consultas";
 import { describirValor } from "@/lib/filtros/tipos";
 import { FILTROS_ACTIVIDAD } from "@/lib/filtros/definiciones";
@@ -25,6 +25,32 @@ describe("frases del registro", () => {
         { campo: "Descripción", antes: null, despues: "c" },
       ])
     ).toBe("Editó GR-2401: precio, estado y descripción");
+  });
+
+  it("zonas: alta, cambios de asesores y borrado con traspaso", () => {
+    expect(frase.altaZona("Pajaritos")).toBe("Creó la zona «Pajaritos»");
+    expect(frase.bajaZona("Norte", "Centro", { bloques: 2, pisos: 30 })).toBe(
+      "Borró la zona «Norte»; sus bloques y pisos pasan a «Centro»"
+    );
+    expect(frase.bajaZona("Vacía", "", { bloques: 0, pisos: 0 })).toBe("Borró la zona «Vacía»");
+    const zona = {
+      id: "z1", oficinaId: "o", nombre: "Pajaritos", color: "verde", notas: null, creadoPorId: null,
+      createdAt: AHORA, updatedAt: AHORA, asesores: [{ usuario: { nombre: "Marta" } }],
+    };
+    const linea = cambioZona(zona, { ...zona, asesores: [{ usuario: { nombre: "Bea" } }, { usuario: { nombre: "Marta" } }] });
+    expect(linea?.resumen).toBe("Cambió los asesores de la zona «Pajaritos»: Marta → Bea, Marta");
+  });
+
+  it("cambiar la zona de un bloque arrastra a sus pisos", () => {
+    const bloque = {
+      id: "b1", oficinaId: "o", calle: "C/ Gaviota", numero: "2", localidad: "Granada", nombre: null,
+      codigoPostal: null, notas: null, zonaId: "z1", creadoPorId: null, createdAt: AHORA, updatedAt: AHORA,
+      zona: { nombre: "General" },
+    };
+    const linea = cambioBloque(bloque, { ...bloque, zonaId: "z2", zona: { nombre: "Pajaritos" } }, 12);
+    expect(linea?.resumen).toBe(
+      "Cambió la zona del bloque C/ Gaviota 2: General → Pajaritos · sus 12 pisos pasan también a «Pajaritos»"
+    );
   });
 
   it("contacto con persona, inmueble y próximo contacto", () => {
@@ -62,6 +88,7 @@ describe("cambios de un inmueble", () => {
     creadoPorId: null,
     createdAt: AHORA,
     updatedAt: AHORA,
+    zonaId: "z1",
     bloqueId: null,
     escalera: null,
     planta: 2,
@@ -73,6 +100,7 @@ describe("cambios de un inmueble", () => {
     fechaFinAlquiler: null,
     propietario: null,
     bloque: null,
+    zona: { nombre: "Centro" },
     asesor: null,
   };
 

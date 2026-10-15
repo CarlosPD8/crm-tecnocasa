@@ -1,10 +1,16 @@
 import { Prisma } from "@/lib/generated/prisma/client";
+import { ErrorAmbito, relacion } from "@/lib/esquema";
+import { acotarRelaciones, conAnd, filtroDe, visibilidad } from "@/lib/zonas";
+
+export { ErrorAmbito };
 
 /**
- * Prisma extension that confines every query to one office.
+ * Prisma extension that confines every query to one office and, for an
+ * advisor, to what their zones let them see (lib/zonas.ts).
  *
- * - Reads, updates and deletes get `oficinaId` added to `where` (a row of another
- *   office is simply "not found": P2025 on update/delete).
+ * - Reads, updates and deletes get `oficinaId` (and the zone filter) added to
+ *   `where`: a row of another office or zone is simply "not found" (P2025 on
+ *   update/delete). `include`/`select` get the zone filter on their relations.
  * - Creates get `oficinaId` and, where the model has it, `creadoPorId`.
  * - Only the operations listed here are allowed; raw SQL and anything unknown
  *   throws, so a new Prisma operation can't silently bypass the scope.
@@ -12,54 +18,18 @@ import { Prisma } from "@/lib/generated/prisma/client";
  * - Nested writes (`connect`, `create`… under a relation) are rejected: they
  *   would skip this extension. Link rows with scalar ids instead; the database
  *   triggers `crm_misma_oficina` reject ids of another office.
+ * - An advisor can't touch zones or their assignments, nor move a block or a
+ *   property to another zone, nor create one in a zone that isn't theirs.
  *
- * Nested reads (`include`, `select`, `_count`, `some`/`none` filters) are safe as
- * they are: the triggers guarantee every relation stays inside the office.
+ * Nested reads are safe across offices: the triggers guarantee every relation
+ * stays inside the office. Relation filters in `where` (`some`, `none`…) only
+ * narrow the rows that the zone filter already allows.
  *
  * Kept free of Next.js imports so scripts and tests can use it.
  */
 
-export class ErrorAmbito extends Error {
-  constructor(mensaje: string) {
-    super(mensaje);
-    this.name = "ErrorAmbito";
-  }
-}
-
-type Relaciones<Include> = Record<Exclude<keyof Include, "_count">, true>;
-
-// Relation fields per model. Typed as exhaustive records: adding a relation to
-// the schema without listing it here is a type error.
-const RELACIONES: Record<Prisma.ModelName, Record<string, true>> = {
-  Oficina: {
-    usuarios: true, clientes: true, inmuebles: true, bloques: true, contactos: true,
-    eventos: true, intereses: true, operaciones: true, archivos: true, actividades: true,
-  } satisfies Relaciones<Prisma.OficinaInclude>,
-  Usuario: {
-    oficina: true, clientesCreados: true, clientesAsignados: true, inmueblesCreados: true,
-    inmueblesAsignados: true, bloquesCreados: true, contactosCreados: true,
-    eventosCreados: true, operacionesCreadas: true, archivosCreados: true, interesesCreados: true,
-    actividades: true,
-  } satisfies Relaciones<Prisma.UsuarioInclude>,
-  Evento: { oficina: true, cliente: true, inmueble: true, creadoPor: true } satisfies Relaciones<Prisma.EventoInclude>,
-  Bloque: { oficina: true, creadoPor: true, inmuebles: true } satisfies Relaciones<Prisma.BloqueInclude>,
-  Cliente: {
-    oficina: true, asesor: true, creadoPor: true, contactos: true, archivos: true,
-    intereses: true, operaciones: true, inmueblesEnPropiedad: true, eventos: true,
-  } satisfies Relaciones<Prisma.ClienteInclude>,
-  Contacto: { oficina: true, cliente: true, inmueble: true, creadoPor: true } satisfies Relaciones<Prisma.ContactoInclude>,
-  Inmueble: {
-    oficina: true, propietario: true, bloque: true, asesor: true, creadoPor: true,
-    archivos: true, intereses: true, operaciones: true, contactos: true, eventos: true,
-  } satisfies Relaciones<Prisma.InmuebleInclude>,
-  Interes: { oficina: true, cliente: true, inmueble: true, creadoPor: true } satisfies Relaciones<Prisma.InteresInclude>,
-  Operacion: { oficina: true, cliente: true, inmueble: true, creadoPor: true } satisfies Relaciones<Prisma.OperacionInclude>,
-  Archivo: { oficina: true, cliente: true, inmueble: true, creadoPor: true } satisfies Relaciones<Prisma.ArchivoInclude>,
-  Actividad: { oficina: true, creadoPor: true } satisfies Relaciones<Prisma.ActividadInclude>,
-};
-
 const CON_AUTOR = new Set<string>([
-  "Evento", "Bloque", "Cliente", "Contacto", "Inmueble", "Operacion", "Archivo", "Interes", "Actividad",
+  "Evento", "Bloque", "Cliente", "Contacto", "Inmueble", "Operacion", "Archivo", "Interes", "Actividad", "Zona",
 ]);
 
 const SOLO_WHERE = new Set([
@@ -73,12 +43,14 @@ const ACTUALIZAR = new Set(["update", "updateMany", "updateManyAndReturn"]);
 const CREAR = new Set(["create", "createMany", "createManyAndReturn"]);
 // The office itself can only be read, and only its own row.
 const LECTURA_OFICINA = new Set(["findUnique", "findUniqueOrThrow", "findFirst", "findFirstOrThrow"]);
+// Models whose rows carry a zone.
+const CON_ZONA = new Set(["Bloque", "Inmueble"]);
 
 type Datos = Record<string, unknown>;
 
 function comprobarDatos(modelo: string, datos: Datos, crear: boolean) {
   for (const campo of Object.keys(datos)) {
-    if (RELACIONES[modelo as Prisma.ModelName][campo]) {
+    if (relacion(modelo, campo)) {
       throw new ErrorAmbito(`Escritura anidada en ${modelo}.${campo}: usa el id escalar`);
     }
     if (!crear && (campo === "oficinaId" || campo === "creadoPorId")) {
@@ -87,9 +59,18 @@ function comprobarDatos(modelo: string, datos: Datos, crear: boolean) {
   }
 }
 
-export function extensionOficina(oficinaId: string, usuarioId: string) {
+/**
+ * `zonas`: the advisor's zone ids, or null for no zone scope (directors, the
+ * seed, scripts and tests).
+ */
+export function extensionOficina(oficinaId: string, usuarioId: string, zonas: readonly string[] | null = null) {
+  const vis = zonas ? visibilidad({ usuarioId, zonas }) : null;
+
   function datosNuevos(modelo: string, datos: Datos): Datos {
     comprobarDatos(modelo, datos, true);
+    if (zonas && CON_ZONA.has(modelo) && !zonas.includes(datos.zonaId as string)) {
+      throw new ErrorAmbito(`${modelo}: solo puedes crear en tus zonas`);
+    }
     return CON_AUTOR.has(modelo)
       ? { ...datos, oficinaId, creadoPorId: usuarioId }
       : { ...datos, oficinaId };
@@ -117,6 +98,19 @@ export function extensionOficina(oficinaId: string, usuarioId: string) {
           throw new ErrorAmbito(`El registro de actividad no se puede modificar (${operation})`);
         }
 
+        const filtro = vis ? filtroDe(vis, model) : undefined;
+        if (vis && !LECTURA.has(operation)) {
+          if (model === "Zona" || model === "ZonaAsesor") {
+            throw new ErrorAmbito("Solo el director gestiona las zonas");
+          }
+          if (operation === "upsert" && filtro) {
+            throw new ErrorAmbito(`${model}.upsert no está permitido con zonas`);
+          }
+          if (ACTUALIZAR.has(operation) && CON_ZONA.has(model) && (a.data as Datos | undefined)?.zonaId !== undefined) {
+            throw new ErrorAmbito("Solo el director cambia la zona");
+          }
+        }
+
         if (SOLO_WHERE.has(operation)) {
           a.where = { ...(a.where as Datos | undefined), oficinaId };
         } else if (ACTUALIZAR.has(operation)) {
@@ -132,6 +126,12 @@ export function extensionOficina(oficinaId: string, usuarioId: string) {
           a.create = datosNuevos(model, a.create as Datos);
         } else {
           throw new ErrorAmbito(`${model}.${operation} no está permitido con el cliente de oficina`);
+        }
+
+        if (vis) {
+          if (filtro && a.where) a.where = conAnd(a.where as Datos, filtro);
+          if (a.include) a.include = acotarRelaciones(model, a.include, vis);
+          if (a.select) a.select = acotarRelaciones(model, a.select, vis);
         }
         return query(a);
       },

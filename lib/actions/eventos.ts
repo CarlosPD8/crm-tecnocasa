@@ -168,12 +168,21 @@ export async function obtenerCalendario(desdeISO: string, hastaISO: string): Pro
   ];
 }
 
-/** Error for the dialog when a linked client or property is not in the office. */
-async function comprobarEnlaces(db: DbOficina, data: EventoInput) {
-  if (data.clienteId && !(await existe(db, "cliente", data.clienteId))) {
+type Enlaces = { clienteId: string | null; inmuebleId: string | null };
+
+/**
+ * Error for the dialog when a newly linked client or property is not one the
+ * user can see. Links that don't change aren't checked again.
+ */
+async function comprobarEnlaces(db: DbOficina, nuevos: Enlaces, anteriores?: Enlaces) {
+  if (nuevos.clienteId && nuevos.clienteId !== anteriores?.clienteId && !(await existe(db, "cliente", nuevos.clienteId))) {
     return { clienteId: ["Ese cliente ya no existe."] };
   }
-  if (data.inmuebleId && !(await existe(db, "inmueble", data.inmuebleId))) {
+  if (
+    nuevos.inmuebleId &&
+    nuevos.inmuebleId !== anteriores?.inmuebleId &&
+    !(await existe(db, "inmueble", nuevos.inmuebleId))
+  ) {
     return { inmuebleId: ["Ese inmueble ya no existe."] };
   }
   return null;
@@ -199,10 +208,11 @@ export async function crearEvento(data: EventoInput) {
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
   }
-  const enlaces = await comprobarEnlaces(db, parsed.data);
+  const datos = datosEvento(parsed.data);
+  const enlaces = await comprobarEnlaces(db, datos);
   if (enlaces) return { success: false as const, error: enlaces };
   const evento = await db.$transaction(async (tx) => {
-    const creado = await tx.evento.create({ data: datosEvento(parsed.data), include: incluirEnlaces });
+    const creado = await tx.evento.create({ data: datos, include: incluirEnlaces });
     await registrarActividad(tx, {
       accion: "ALTA",
       entidad: "EVENTO",
@@ -222,16 +232,21 @@ export async function actualizarEvento(id: string, data: EventoInput) {
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
   }
-  const enlaces = await comprobarEnlaces(db, parsed.data);
-  if (enlaces) return { success: false as const, error: enlaces };
   const anterior = await db.evento.findUnique({ where: { id }, include: incluirEnlaces });
   if (!anterior) {
     return { success: false as const, error: { titulo: ["Este evento ya no existe."] } };
   }
+  const datos = datosEvento(parsed.data);
+  // An advisor's own appointment may point to someone of another zone: the
+  // dialog doesn't show that link, and saving keeps it.
+  if (anterior.clienteId && !anterior.cliente) datos.clienteId = anterior.clienteId;
+  if (anterior.inmuebleId && !anterior.inmueble) datos.inmuebleId = anterior.inmuebleId;
+  const enlaces = await comprobarEnlaces(db, datos, anterior);
+  if (enlaces) return { success: false as const, error: enlaces };
   const evento = await db.$transaction(async (tx) => {
     const nuevo = await tx.evento.update({
       where: { id },
-      data: datosEvento(parsed.data),
+      data: datos,
       include: incluirEnlaces,
     });
     const cambio = cambioEvento(anterior, nuevo);

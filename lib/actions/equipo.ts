@@ -27,6 +27,17 @@ async function contextoDirector(): Promise<Contexto | null> {
   return ctx.esDirector ? ctx : null;
 }
 
+/** The zones with those ids (all must be of the office), sorted by name; null otherwise. */
+async function zonasValidas(db: DbOficina, ids: string[]) {
+  const unicos = [...new Set(ids)];
+  const zonas = await db.zona.findMany({ where: { id: { in: unicos } }, select: { id: true, nombre: true } });
+  return zonas.length === unicos.length ? zonas.sort((a, b) => a.nombre.localeCompare(b.nombre, "es")) : null;
+}
+
+const listaZonas = (zonas: { nombre: string }[]) => zonas.map((z) => z.nombre).join(", ") || null;
+
+const ZONAS_NO_VALIDAS = { success: false as const, error: { zonaIds: ["Elige zonas de la oficina."] } as Errores };
+
 class SinDirector extends Error {}
 
 /** Throws inside a transaction when the office would be left without an active director. */
@@ -49,6 +60,8 @@ export async function crearUsuario(data: NuevoUsuarioInput) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors as Errores };
   }
   const { nombre, email, rol, password } = parsed.data;
+  const zonas = rol === "ASESOR" ? await zonasValidas(ctx.db, parsed.data.zonaIds ?? []) : [];
+  if (!zonas) return ZONAS_NO_VALIDAS;
 
   const admin = crearClienteAdmin();
   const { data: creado, error } = await admin.auth.admin.createUser({
@@ -73,12 +86,17 @@ export async function crearUsuario(data: NuevoUsuarioInput) {
       await tx.usuario.create({
         data: { id: creado.user.id, nombre, email, rol, debeCambiarPassword: true },
       });
+      if (zonas.length) {
+        await tx.zonaAsesor.createMany({ data: zonas.map((z) => ({ zonaId: z.id, usuarioId: creado.user.id })) });
+      }
       await registrarActividad(tx, {
         accion: "ALTA",
         entidad: "USUARIO",
         entidadId: creado.user.id,
         enlace: "/equipo",
-        resumen: `Dio de alta a ${nombre} en el equipo (${ROL_LABELS[rol]})`,
+        resumen:
+          `Dio de alta a ${nombre} en el equipo (${ROL_LABELS[rol]})` +
+          (zonas.length ? ` en ${listaZonas(zonas)}` : ""),
       });
     });
   } catch {
@@ -99,16 +117,42 @@ export async function editarUsuario(id: string, data: EditarUsuarioInput) {
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors as Errores };
   }
+  const { zonaIds, ...datos } = parsed.data;
+  // A director sees every zone, so they keep none; undefined leaves an advisor's as they are.
+  const zonas =
+    datos.rol === "DIRECTOR" ? [] : zonaIds === undefined ? undefined : await zonasValidas(ctx.db, zonaIds);
+  if (zonas === null) return ZONAS_NO_VALIDAS;
 
   try {
     const count = await ctx.db.$transaction(async (tx) => {
-      const antes = await tx.usuario.findUnique({ where: { id }, select: { nombre: true, rol: true } });
-      const { count } = await tx.usuario.updateMany({ where: { id }, data: parsed.data });
+      const antes = await tx.usuario.findUnique({
+        where: { id },
+        select: {
+          nombre: true,
+          rol: true,
+          zonasAsignadas: { select: { zona: { select: { nombre: true } } }, orderBy: { zona: { nombre: "asc" } } },
+        },
+      });
+      const { count } = await tx.usuario.updateMany({ where: { id }, data: datos });
       await exigirDirectorActivo(tx);
+      if (count && zonas) {
+        await tx.zonaAsesor.deleteMany({ where: { usuarioId: id, zonaId: { notIn: zonas.map((z) => z.id) } } });
+        if (zonas.length) {
+          await tx.zonaAsesor.createMany({
+            data: zonas.map((z) => ({ zonaId: z.id, usuarioId: id })),
+            skipDuplicates: true,
+          });
+        }
+      }
       if (antes && count) {
+        const zonasAntes = listaZonas(antes.zonasAsignadas.map((a) => a.zona));
         const cambios = [
-          { campo: "Nombre", articulo: "el", antes: antes.nombre, despues: parsed.data.nombre },
-          { campo: "Rol", articulo: "el", antes: ROL_LABELS[antes.rol], despues: ROL_LABELS[parsed.data.rol] },
+          { campo: "Nombre", articulo: "el", antes: antes.nombre, despues: datos.nombre },
+          { campo: "Rol", articulo: "el", antes: ROL_LABELS[antes.rol], despues: ROL_LABELS[datos.rol] },
+          // Only when they work zones (a director has none to speak of).
+          ...(zonas && datos.rol === "ASESOR"
+            ? [{ campo: "Zonas", articulo: "las", antes: zonasAntes, despues: listaZonas(zonas) }]
+            : []),
         ].filter((c) => c.antes !== c.despues);
         if (cambios.length) {
           await registrarActividad(tx, {

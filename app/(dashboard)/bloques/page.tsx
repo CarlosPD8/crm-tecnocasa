@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { Building, Plus, SearchX } from "lucide-react";
+import { Building, MapPinned, Plus, SearchX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ENLACE_FILA } from "@/components/shared/row-link";
 import { FilaEnlace } from "@/components/shared/fila-enlace";
 
-import { getContexto } from "@/lib/db";
+import { getContexto, zonasVisibles } from "@/lib/db";
 import { resumenPorBloque } from "@/lib/bloques";
 import { formatBloque } from "@/lib/validations/bloque";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { Pagination } from "@/components/shared/pagination";
 import { BarraFiltros } from "@/components/shared/filtros/barra-filtros";
 import { OcupacionBar } from "@/components/bloques/ocupacion-bar";
 import { CaptacionBadge } from "@/components/inmuebles/situacion";
+import { ZonaBadge } from "@/components/zonas/zona-badge";
 import { consultaBloques } from "@/lib/filtros/consultas";
 import { contarFiltros, paramsDeFiltros } from "@/lib/filtros/definiciones";
 
@@ -32,22 +33,25 @@ export default async function BloquesPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { db, esDirector } = await getContexto();
+  const ctx = await getContexto();
+  const { db, esDirector } = ctx;
+  const sinZona = ctx.zonas?.length === 0;
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page ?? "1") || 1);
   const { where, orderBy } = consultaBloques(sp);
   const filtrado = Boolean(sp.q || contarFiltros("bloques", sp));
 
-  const [bloques, total, localidades] = await Promise.all([
+  const [bloques, total, localidades, zonas] = await Promise.all([
     db.bloque.findMany({
       where,
       orderBy,
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      include: { _count: { select: { inmuebles: true } } },
+      include: { zona: { select: { nombre: true, color: true } }, _count: { select: { inmuebles: true } } },
     }),
     db.bloque.count({ where }),
     db.bloque.findMany({ distinct: ["localidad"], select: { localidad: true }, orderBy: { localidad: "asc" } }),
+    zonasVisibles(ctx),
   ]);
   const resumen = await resumenPorBloque(db, bloques.map((b) => b.id));
 
@@ -58,15 +62,17 @@ export default async function BloquesPage({
         title="Bloques"
         description={`${total} ${total === 1 ? "edificio" : "edificios"}${filtrado ? " con los filtros actuales" : ""}. Agrupa los pisos de un mismo portal para ver su ocupación de un vistazo.`}
         actions={
-          <Button
-            size="lg"
-            nativeButton={false}
-            render={
-              <Link href="/bloques/nuevo">
-                <Plus /> Nuevo bloque
-              </Link>
-            }
-          />
+          !sinZona && (
+            <Button
+              size="lg"
+              nativeButton={false}
+              render={
+                <Link href="/bloques/nuevo">
+                  <Plus /> Nuevo bloque
+                </Link>
+              }
+            />
+          )
         }
       />
 
@@ -77,11 +83,20 @@ export default async function BloquesPage({
           pdf={{ total }}
           ariaBusqueda="Buscar bloques"
           placeholder="Calle, número, nombre o localidad…"
-          opciones={{ localidad: Object.fromEntries(localidades.map((l) => [l.localidad, l.localidad])) }}
+          opciones={{
+            zona: Object.fromEntries(zonas.map((z) => [z.id, z.nombre])),
+            localidad: Object.fromEntries(localidades.map((l) => [l.localidad, l.localidad])),
+          }}
         />
 
         {bloques.length === 0 ? (
-          filtrado ? (
+          sinZona ? (
+            <EmptyState
+            icon={MapPinned}
+            title="Aún no tienes zona asignada"
+            description="Pídesela al director: hasta entonces no verás pisos ni bloques."
+          />
+          ) : filtrado ? (
             <EmptyState
               icon={SearchX}
               title="Ningún bloque coincide"
@@ -103,6 +118,7 @@ export default async function BloquesPage({
               <TableRow>
                 <TableHead>Bloque</TableHead>
                 <TableHead>Localidad</TableHead>
+                <TableHead className="hidden md:table-cell">Zona</TableHead>
                 <TableHead className="text-right">Pisos</TableHead>
                 <TableHead>Ocupación</TableHead>
                 <TableHead>Captación</TableHead>
@@ -131,6 +147,9 @@ export default async function BloquesPage({
                       </Link>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{bloque.localidad}</TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <ZonaBadge zona={bloque.zona} />
+                    </TableCell>
                     <TableCell className="text-right font-medium">{bloque._count.inmuebles}</TableCell>
                     <TableCell>
                       <OcupacionBar resumen={r.ocupacion} />

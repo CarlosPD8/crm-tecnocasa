@@ -285,6 +285,7 @@ function EventoForm({
             valueLabel={b.cliente?.label}
             onChange={(c) => set("cliente", c)}
             placeholder="Buscar cliente…"
+            incluirAjenos={false}
           />
         </Field>
         <Field label="Inmueble" optional>

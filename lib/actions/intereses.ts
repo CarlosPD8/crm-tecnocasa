@@ -1,15 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getContexto } from "@/lib/db";
+import { dbSinZonas, getContexto } from "@/lib/db";
 import { registrarActividad } from "@/lib/actividad";
 
 export async function agregarInteres(inmuebleId: string, clienteId: string) {
-  const { db } = await getContexto();
+  const ctx = await getContexto();
+  const { db } = ctx;
 
+  // Any client of the office (found by exact DNI or phone): see buscarClientes.
   const [inmueble, cliente] = await Promise.all([
     db.inmueble.findUnique({ where: { id: inmuebleId }, select: { referencia: true } }),
-    db.cliente.findUnique({ where: { id: clienteId }, select: { nombre: true, apellidos: true } }),
+    dbSinZonas(ctx).cliente.findUnique({ where: { id: clienteId }, select: { nombre: true, apellidos: true } }),
   ]);
   if (!inmueble || !cliente) {
     return { success: false as const, error: "Ese cliente o inmueble ya no existe." };

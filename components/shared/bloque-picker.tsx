@@ -19,12 +19,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Field } from "@/components/shared/form";
+import { ZonaPunto } from "@/components/zonas/zona-badge";
+import { ZonaSelect } from "@/components/zonas/zona-select";
+import type { OpcionZona } from "@/lib/db";
 
 export type BloqueSeleccionado = {
   id: string;
   calle: string;
   numero: string;
   localidad: string;
+  zona: { id: string; nombre: string; color: string };
 };
 
 type BloqueResultado = Awaited<ReturnType<typeof buscarBloques>>[number];
@@ -33,16 +37,23 @@ export function BloquePicker({
   value,
   onChange,
   obtenerLocalidad,
+  obtenerZona,
+  zonas,
 }: {
   value: BloqueSeleccionado | null;
   onChange: (bloque: BloqueSeleccionado | null) => void;
   /** Read at the moment «Nuevo bloque» is clicked, so it reflects what was just typed. */
   obtenerLocalidad?: () => string | undefined;
+  /** Likewise, the zone already chosen for the flat. */
+  obtenerZona?: () => string | undefined;
+  /** Zones a new block can go in. */
+  zonas: OpcionZona[];
 }) {
   const [open, setOpen] = useState(false);
   const [creando, setCreando] = useState(false);
   // Captured when the dialog opens: its input's default must not change while mounted.
   const [localidadInicial, setLocalidadInicial] = useState<string | undefined>();
+  const [zonaInicial, setZonaInicial] = useState<string | undefined>();
   const [query, setQuery] = useState("");
   const [resultados, setResultados] = useState<BloqueResultado[]>([]);
   const [loading, setLoading] = useState(false);
@@ -144,10 +155,13 @@ export function BloquePicker({
                   </span>
                   <span className="min-w-0">
                     <span className="block truncate font-medium">{formatBloque(b)}</span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {[b.nombre, b.localidad].filter(Boolean).join(" · ")} ·{" "}
-                      <span className="tabular">{b._count.inmuebles}</span>{" "}
-                      {b._count.inmuebles === 1 ? "inmueble" : "inmuebles"}
+                    <span className="flex items-center gap-1.5 truncate text-xs text-muted-foreground">
+                      <ZonaPunto color={b.zona.color} />
+                      <span className="truncate">
+                        {[b.zona.nombre, b.nombre, b.localidad].filter(Boolean).join(" · ")} ·{" "}
+                        <span className="tabular">{b._count.inmuebles}</span>{" "}
+                        {b._count.inmuebles === 1 ? "inmueble" : "inmuebles"}
+                      </span>
                     </span>
                   </span>
                 </button>
@@ -160,6 +174,7 @@ export function BloquePicker({
               onClick={() => {
                 setOpen(false);
                 setLocalidadInicial(obtenerLocalidad?.());
+                setZonaInicial(obtenerZona?.() || (zonas.length === 1 ? zonas[0].id : undefined));
                 setCreando(true);
               }}
             >
@@ -184,6 +199,8 @@ export function BloquePicker({
         open={creando}
         onOpenChange={setCreando}
         defaultLocalidad={localidadInicial}
+        defaultZona={zonaInicial}
+        zonas={zonas}
         onCreated={(b) => {
           elegir(b);
           setCreando(false);
@@ -197,15 +214,26 @@ function NuevoBloqueDialog({
   open,
   onOpenChange,
   defaultLocalidad,
+  defaultZona,
+  zonas,
   onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultLocalidad?: string;
+  defaultZona?: string;
+  zonas: OpcionZona[];
   onCreated: (bloque: BloqueSeleccionado) => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const [errores, setErrores] = useState<Record<string, string[] | undefined>>({});
+  const [zonaId, setZonaId] = useState(defaultZona ?? "");
+  // A new opening starts from the zone captured for it.
+  const [abiertoCon, setAbiertoCon] = useState(defaultZona);
+  if (abiertoCon !== defaultZona) {
+    setAbiertoCon(defaultZona);
+    setZonaId(defaultZona ?? "");
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     // The dialog is portaled out of the property form in the DOM, but React
@@ -218,6 +246,7 @@ function NuevoBloqueDialog({
       numero: String(fd.get("numero") ?? ""),
       localidad: String(fd.get("localidad") ?? ""),
       nombre: String(fd.get("nombre") ?? ""),
+      zonaId,
     };
     startTransition(async () => {
       let result: Awaited<ReturnType<typeof crearBloque>>;
@@ -263,6 +292,9 @@ function NuevoBloqueDialog({
                 defaultValue={defaultLocalidad}
                 aria-invalid={!!errores.localidad}
               />
+            </Field>
+            <Field label="Zona" htmlFor="nb-zona" error={errores.zonaId?.[0]} className="sm:col-span-2">
+              <ZonaSelect id="nb-zona" value={zonaId} onChange={setZonaId} zonas={zonas} invalid={!!errores.zonaId} />
             </Field>
             <Field label="Nombre" htmlFor="nb-nombre" optional className="sm:col-span-2">
               <Input id="nb-nombre" name="nombre" placeholder="Residencial Los Álamos" />

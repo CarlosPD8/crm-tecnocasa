@@ -8,8 +8,8 @@ export const ROL_LABELS: Record<RolUsuario, string> = {
 };
 
 export const ROL_DESCRIPCION: Record<RolUsuario, string> = {
-  DIRECTOR: "Gestiona el equipo, borra registros, reasigna y exporta.",
-  ASESOR: "Trabaja con todos los datos de la oficina.",
+  DIRECTOR: "Ve toda la oficina. Gestiona el equipo y las zonas, borra registros, reasigna y exporta.",
+  ASESOR: "Trabaja los pisos y bloques de sus zonas, y los clientes de esos pisos.",
 };
 
 const nombre = z.string().trim().min(2, "Escribe el nombre.").max(80, "Demasiado largo.");
@@ -25,11 +25,14 @@ export const nuevoUsuarioSchema = z.object({
   email: z.string().trim().toLowerCase().min(1, "Escribe el email.").email("Email no válido."),
   rol: z.nativeEnum(RolUsuario),
   password: passwordTemporalSchema,
+  // Zones an advisor works (ignored for a director, who sees them all).
+  zonaIds: z.array(z.string()).max(200).optional(),
 });
 
 export const editarUsuarioSchema = z.object({
   nombre,
   rol: z.nativeEnum(RolUsuario),
+  zonaIds: z.array(z.string()).max(200).optional(),
 });
 
 export type NuevoUsuarioInput = z.infer<typeof nuevoUsuarioSchema>;
