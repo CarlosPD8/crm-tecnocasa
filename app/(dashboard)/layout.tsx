@@ -1,6 +1,9 @@
 import { Topbar } from "@/components/layout/topbar";
 import { getContexto } from "@/lib/db";
 import { Toaster } from "@/components/ui/sonner";
+import { UbicacionProvider } from "@/components/ubicacion/ubicacion-provider";
+import { ipDeLaPeticion } from "@/lib/ubicacion/servidor";
+import { ipEnRedes } from "@/lib/ubicacion/red";
 
 export default async function DashboardLayout({
   children,
@@ -8,7 +11,9 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   // Signs out, locks out or sends to the password change whoever can't be here.
-  const { usuario, oficina, esDirector } = await getContexto();
+  const { usuario, oficina, esDirector, controlUbicacion, ubicacionOficina } = await getContexto();
+  // Only a hint for the browser (skip the GPS on the office network): every save checks again.
+  const redOficina = controlUbicacion && ipEnRedes(await ipDeLaPeticion(), ubicacionOficina.redes);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -22,12 +27,14 @@ export default async function DashboardLayout({
         usuario={{ nombre: usuario.nombre, email: usuario.email, oficina: oficina.nombre }}
         esDirector={esDirector}
       />
-      <main
-        id="contenido"
-        className="mx-auto w-full max-w-7xl flex-1 px-4 pt-8 pb-16 sm:px-6 lg:px-8 lg:pt-10"
-      >
-        {children}
-      </main>
+      <UbicacionProvider control={controlUbicacion} redOficina={redOficina}>
+        <main
+          id="contenido"
+          className="mx-auto w-full max-w-7xl flex-1 px-4 pt-8 pb-16 sm:px-6 lg:px-8 lg:pt-10"
+        >
+          {children}
+        </main>
+      </UbicacionProvider>
       <Toaster />
     </div>
   );

@@ -86,6 +86,7 @@ enum EntidadActividad {
   OPERACION
   USUARIO
   ZONA
+  OFICINA
 }
 
 enum TipoEvento {
@@ -106,6 +107,17 @@ model Oficina {
   activa    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Control de ubicación (lib/lugar.ts): encendido, un asesor solo guarda datos
+  // desde una de sus zonas o desde la oficina. Apagado hasta que lo enciende el director.
+  controlUbicacion      Boolean   @default(false)
+  controlUbicacionDesde DateTime?
+  // La oficina en el mapa y cuánto alrededor cuenta como «en la oficina».
+  latitud               Float?
+  longitud              Float?
+  radioMetros           Int       @default(150)
+  // Redes de la oficina: una IPv4 («81.32.10.4») o un prefijo IPv6 /64 («2a01:4f8:1:2::/64»).
+  redes                 String[]  @default([])
 
   usuarios     Usuario[]
   clientes     Cliente[]
@@ -438,6 +450,9 @@ model Actividad {
   detalle     String?
   // Campos cambiados: [{ campo, antes, despues }], ya formateados.
   cambios     Json?
+  // Dónde estaba al guardarlo, con el control de ubicación: «Zaidín»,
+  // «Oficina» o «Red de la oficina». Nunca coordenadas.
+  lugar       String?
 
   oficina   Oficina  @relation(fields: [oficinaId], references: [id], onDelete: Restrict)
   creadoPor Usuario? @relation("ActividadCreadoPor", fields: [creadoPorId], references: [id], onDelete: SetNull)
@@ -456,6 +471,8 @@ model Zona {
   // Clave de la paleta fija de lib/validations/zona.ts.
   color       String
   notas       String?
+  // Contorno dibujado en el mapa: geometría GeoJSON Polygon, en [lng, lat].
+  forma       Json?
   creadoPorId String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

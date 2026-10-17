@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, ImageOff, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { moverFoto, eliminarArchivo } from "@/lib/actions/archivos";
+import { useLugar } from "@/components/ubicacion/ubicacion-provider";
 
 export type FotoInmueble = {
   id: string;
@@ -21,17 +22,20 @@ const botonFoto =
 
 export function FotosGallery({ fotos }: { fotos: FotoInmueble[] }) {
   const [isPending, startTransition] = useTransition();
+  // The click is the save: the location is checked then (the toast says why not).
+  const { guardar } = useLugar();
 
   function mover(id: string, direccion: "arriba" | "abajo") {
     startTransition(async () => {
-      const result = await moverFoto(id, direccion);
-      if (!result.success) toast.error("No se pudo reordenar la foto.");
+      const result = await guardar((ub) => moverFoto(id, direccion, ub));
+      if (result && !result.success) toast.error("No se pudo reordenar la foto.");
     });
   }
 
   function eliminar(id: string) {
     startTransition(async () => {
-      const result = await eliminarArchivo(id);
+      const result = await guardar((ub) => eliminarArchivo(id, ub));
+      if (!result) return;
       if (!result.success) {
         toast.error(result.error);
         return;

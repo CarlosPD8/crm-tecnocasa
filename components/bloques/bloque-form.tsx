@@ -13,6 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Field, FormActions, FormSection, FormShell } from "@/components/shared/form";
 import { ZonaSelect } from "@/components/zonas/zona-select";
 import { ZonaBadge } from "@/components/zonas/zona-badge";
+import { AvisoUbicacion } from "@/components/ubicacion/aviso-ubicacion";
+import { useLugar } from "@/components/ubicacion/ubicacion-provider";
 import type { Bloque } from "@/lib/generated/prisma/client";
 import type { OpcionZona } from "@/lib/db";
 
@@ -30,6 +32,7 @@ export function BloqueForm({
   esDirector: boolean;
 }) {
   const router = useRouter();
+  const lugar = useLugar({ alAbrir: true });
   const puedeCambiarZona = !bloque || esDirector;
   const {
     register,
@@ -54,7 +57,10 @@ export function BloqueForm({
   });
 
   async function onSubmit(data: BloqueInput) {
-    const result = bloque ? await actualizarBloque(bloque.id, data) : await crearBloque(data);
+    const result = await lugar.guardar(async (ub) =>
+      bloque ? await actualizarBloque(bloque.id, data, ub) : await crearBloque(data, ub)
+    );
+    if (!result) return;
 
     if (!result.success) {
       // Surface server errors (e.g. duplicate address) on their fields.
@@ -74,6 +80,7 @@ export function BloqueForm({
 
   return (
     <FormShell onSubmit={handleSubmit(onSubmit)} noValidate className="max-w-4xl">
+      <AvisoUbicacion lugar={lugar} className="mt-4" />
       <FormSection
         title="Dirección"
         description="Calle, número y localidad identifican el edificio: no puede haber dos bloques con la misma dirección."
@@ -157,7 +164,7 @@ export function BloqueForm({
         <Button type="button" variant="ghost" onClick={() => router.back()}>
           Cancelar
         </Button>
-        <Button type="submit" size="lg" disabled={isSubmitting}>
+        <Button type="submit" size="lg" disabled={isSubmitting || lugar.bloqueado}>
           {isSubmitting ? "Guardando…" : bloque ? "Guardar cambios" : "Crear bloque"}
         </Button>
       </FormActions>

@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, MapPin } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { horaMadrid, type Cambio } from "@/lib/actividad";
+import { horaMadrid, textoLugar, type Cambio } from "@/lib/actividad";
 import type { AccionActividad, EntidadActividad } from "@/lib/generated/prisma/enums";
 
 export type FilaActividad = {
@@ -16,6 +16,8 @@ export type FilaActividad = {
   resumen: string;
   detalle: string | null;
   cambios: unknown;
+  /** Where it was saved from, with the location control on. */
+  lugar: string | null;
 };
 
 export type PersonaActividad = { id: string; nombre: string; esDirector: boolean };
@@ -202,6 +204,12 @@ function Linea({ fila, vigente }: { fila: FilaActividad; vigente: boolean }) {
         {fila.detalle && (
           <p className="line-clamp-3 max-w-[70ch] text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
             {fila.detalle}
+          </p>
+        )}
+        {fila.lugar && (
+          <p className="flex items-center gap-1 text-xs text-muted-foreground">
+            <MapPin aria-hidden className="size-3" />
+            {textoLugar(fila.lugar)}
           </p>
         )}
       </div>

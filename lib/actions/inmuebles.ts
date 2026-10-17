@@ -5,12 +5,14 @@ import {
   esUnicoViolado,
   existeEnOficina,
   getContexto,
+  getContextoEscritura,
   resolverAsesor,
   resolverZona,
   SIN_PERMISO,
   type Contexto,
   type DbOficina,
 } from "@/lib/db";
+import type { UbicacionEnviada } from "@/lib/validations/ubicacion";
 import { cambioInmueble, frase, incluirCambiosInmueble, registrarActividad } from "@/lib/actividad";
 import { inmuebleSchema, type InmuebleInput } from "@/lib/validations/inmueble";
 
@@ -125,8 +127,9 @@ function revalidarBloque(bloqueId: string | null) {
   revalidatePath("/bloques");
 }
 
-export async function crearInmueble(data: InmuebleInput) {
-  const ctx = await getContexto();
+export async function crearInmueble(data: InmuebleInput, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
   const { db } = ctx;
   const parsed = inmuebleSchema.safeParse(data);
   if (!parsed.success) {
@@ -166,8 +169,9 @@ export async function crearInmueble(data: InmuebleInput) {
   return { success: true as const, inmuebleId: inmueble.id };
 }
 
-export async function actualizarInmueble(id: string, data: InmuebleInput) {
-  const ctx = await getContexto();
+export async function actualizarInmueble(id: string, data: InmuebleInput, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
   const { db } = ctx;
   const parsed = inmuebleSchema.safeParse(data);
   if (!parsed.success) {
@@ -215,8 +219,10 @@ export async function actualizarInmueble(id: string, data: InmuebleInput) {
   return { success: true as const, inmuebleId: id };
 }
 
-export async function eliminarInmueble(id: string) {
-  const { db, esDirector } = await getContexto();
+export async function eliminarInmueble(id: string, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
+  const { db, esDirector } = ctx;
   if (!esDirector) return SIN_PERMISO;
 
   const inmueble = await db.inmueble.findUnique({

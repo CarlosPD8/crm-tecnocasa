@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cambioBloque, cambioInmueble, cambioZona, cuandoEvento, diaDe, euros, frase } from "@/lib/actividad";
+import { cambioBloque, cambioInmueble, cambioZona, cuandoEvento, diaDe, euros, frase, textoLugar } from "@/lib/actividad";
 import { consultaActividad } from "@/lib/filtros/consultas";
 import { describirValor } from "@/lib/filtros/tipos";
 import { FILTROS_ACTIVIDAD } from "@/lib/filtros/definiciones";
@@ -34,11 +34,26 @@ describe("frases del registro", () => {
     );
     expect(frase.bajaZona("Vacía", "", { bloques: 0, pisos: 0 })).toBe("Borró la zona «Vacía»");
     const zona = {
-      id: "z1", oficinaId: "o", nombre: "Pajaritos", color: "verde", notas: null, creadoPorId: null,
+      id: "z1", oficinaId: "o", nombre: "Pajaritos", color: "verde", notas: null, forma: null, creadoPorId: null,
       createdAt: AHORA, updatedAt: AHORA, asesores: [{ usuario: { nombre: "Marta" } }],
     };
     const linea = cambioZona(zona, { ...zona, asesores: [{ usuario: { nombre: "Bea" } }, { usuario: { nombre: "Marta" } }] });
     expect(linea?.resumen).toBe("Cambió los asesores de la zona «Pajaritos»: Marta → Bea, Marta");
+  });
+
+  it("ubicación: contornos, control, oficina y lugar", () => {
+    expect(frase.formaZona("Zaidín", false, true)).toBe("Dibujó el contorno de la zona «Zaidín»");
+    expect(frase.formaZona("Zaidín", true, true)).toBe("Cambió el contorno de la zona «Zaidín»");
+    expect(frase.formaZona("Zaidín", true, false)).toBe("Borró el contorno de la zona «Zaidín»");
+    expect(frase.controlUbicacion(true)).toMatch(/^Activó el control de ubicación/);
+    expect(frase.controlUbicacion(false)).toBe("Desactivó el control de ubicación");
+    expect(frase.oficinaEnMapa(150, false)).toBe("Marcó la oficina en el mapa (radio de 150 m)");
+    expect(frase.oficinaEnMapa(200, true)).toBe("Cambió la oficina en el mapa (radio de 200 m)");
+    expect(frase.redOficina("81.32.10.4")).toBe("Marcó la red de la oficina (81.32.10.4)");
+    expect(frase.redOficina("81.32.10.4", true)).toBe("Quitó la red de la oficina 81.32.10.4");
+    expect(textoLugar("Oficina")).toBe("En la oficina");
+    expect(textoLugar("Red de la oficina")).toBe("Desde la red de la oficina");
+    expect(textoLugar("Zaidín")).toBe("En Zaidín");
   });
 
   it("cambiar la zona de un bloque arrastra a sus pisos", () => {

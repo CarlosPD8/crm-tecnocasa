@@ -11,6 +11,7 @@ import { formatBloque } from "@/lib/validations/bloque";
 import { ordenarEtiquetas, TIPO_CLIENTE_LABELS } from "@/lib/validations/cliente";
 import { TIPO_EVENTO_LABELS } from "@/lib/validations/evento";
 import { colorZona } from "@/lib/validations/zona";
+import { LUGAR_OFICINA, LUGAR_RED } from "@/lib/ubicacion/lugar";
 import {
   captacionLabel,
   ESTADO_INMUEBLE_LABELS,
@@ -87,6 +88,13 @@ export function cuandoEvento(e: Pick<Evento, "inicio" | "todoElDia">) {
   return `${d}/${m}/${y} ${horaMadrid(e.inicio)}`;
 }
 
+/** «En la oficina», «Desde la red de la oficina», «En Zaidín»: where a line was saved. */
+export function textoLugar(lugar: string) {
+  if (lugar === LUGAR_OFICINA) return "En la oficina";
+  if (lugar === LUGAR_RED) return "Desde la red de la oficina";
+  return `En ${lugar}`;
+}
+
 function recortar(texto: string | null, max = 80) {
   if (!texto) return null;
   const limpio = texto.replace(/\s+/g, " ").trim();
@@ -111,6 +119,20 @@ export const frase = {
     movidos.bloques + movidos.pisos > 0
       ? `Borró la zona «${nombre}»; sus bloques y pisos pasan a «${destino}»`
       : `Borró la zona «${nombre}»`,
+  formaZona: (nombre: string, antes: boolean, despues: boolean) =>
+    !despues
+      ? `Borró el contorno de la zona «${nombre}»`
+      : antes
+        ? `Cambió el contorno de la zona «${nombre}»`
+        : `Dibujó el contorno de la zona «${nombre}»`,
+  controlUbicacion: (activo: boolean) =>
+    activo
+      ? "Activó el control de ubicación: los asesores solo registran desde sus zonas o la oficina"
+      : "Desactivó el control de ubicación",
+  oficinaEnMapa: (radioMetros: number, antes: boolean) =>
+    `${antes ? "Cambió" : "Marcó"} la oficina en el mapa (radio de ${radioMetros} m)`,
+  redOficina: (red: string, quitada = false) =>
+    quitada ? `Quitó la red de la oficina ${red}` : `Marcó la red de la oficina (${red})`,
   contacto(con: string | null, sobre: string | null, proximo?: Date | null) {
     const base =
       con && sobre

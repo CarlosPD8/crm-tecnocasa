@@ -8,6 +8,16 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ProximoContactoPicker } from "@/components/shared/proximo-contacto";
 import { hoyISO } from "@/lib/filtros/tipos";
+import { AvisoUbicacion } from "@/components/ubicacion/aviso-ubicacion";
+import { useLugar } from "@/components/ubicacion/ubicacion-provider";
+import type { UbicacionEnviada } from "@/lib/validations/ubicacion";
+
+type Resultado = { success: boolean; error?: string | Record<string, string[] | undefined> };
+
+function primerError(error: Resultado["error"]) {
+  if (!error) return undefined;
+  return typeof error === "string" ? error : Object.values(error).flat()[0];
+}
 
 /**
  * Note composer shared by client and property histories. The caller decides
@@ -20,12 +30,14 @@ export function ContactoForm({
   proximoActual,
   children,
 }: {
-  registrar: (data: { nota: string; fechaProximoContacto: string }) => Promise<{ success: boolean }>;
+  registrar: (data: { nota: string; fechaProximoContacto: string }, ub: UbicacionEnviada) => Promise<Resultado>;
   /** Stored follow-up (yyyy-MM-dd) or null. */
   proximoActual: string | null;
   children?: React.ReactNode;
 }) {
   const [isPending, startTransition] = useTransition();
+  // Asked on the first touch, not on opening the record: viewing asks nothing.
+  const lugar = useLugar();
   // A follow-up that is due today or overdue is the call being logged now, so
   // it does not carry over; a future one stays unless it is changed.
   const [fechaProximo, setFechaProximo] = useState(() =>
@@ -41,9 +53,10 @@ export function ContactoForm({
     }
 
     startTransition(async () => {
-      const result = await registrar({ nota, fechaProximoContacto: fechaProximo });
+      const result = await lugar.guardar((ub) => registrar({ nota, fechaProximoContacto: fechaProximo }, ub));
+      if (!result) return;
       if (!result.success) {
-        toast.error("No se pudo registrar el contacto.");
+        toast.error(primerError(result.error) ?? "No se pudo registrar el contacto.");
         return;
       }
       toast.success(
@@ -56,8 +69,9 @@ export function ContactoForm({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4" {...lugar.alInteractuar}>
       {children}
+      <AvisoUbicacion lugar={lugar} />
       <form
         ref={formRef}
         action={handleSubmit}
@@ -89,7 +103,7 @@ export function ContactoForm({
             + <kbd className="rounded border border-border bg-card px-1 font-sans text-[0.7rem]">Enter</kbd>{" "}
             para guardar
           </span>
-          <Button type="submit" size="sm" disabled={isPending} className="ml-auto">
+          <Button type="submit" size="sm" disabled={isPending || lugar.bloqueado} className="ml-auto">
             {isPending ? "Guardando…" : "Registrar contacto"}
           </Button>
         </div>

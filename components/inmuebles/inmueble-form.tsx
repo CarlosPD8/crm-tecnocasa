@@ -41,6 +41,8 @@ import {
 import { AsesorSelect } from "@/components/shared/asesor-select";
 import { ZonaSelect } from "@/components/zonas/zona-select";
 import { ZonaBadge } from "@/components/zonas/zona-badge";
+import { AvisoUbicacion } from "@/components/ubicacion/aviso-ubicacion";
+import { useLugar } from "@/components/ubicacion/ubicacion-provider";
 import type { Inmueble } from "@/lib/generated/prisma/client";
 import type { OpcionAsesor, OpcionZona } from "@/lib/db";
 
@@ -86,6 +88,7 @@ export function InmuebleForm({
   esDirector: boolean;
 }) {
   const router = useRouter();
+  const lugar = useLugar({ alAbrir: true });
   const eligeZona = !inmueble || esDirector;
   const [propietario, setPropietario] = useState<{ id: string; label: string } | null>(
     propietarioInicial ?? null
@@ -167,9 +170,10 @@ export function InmuebleForm({
       bloqueId: bloque?.id ?? "",
     };
 
-    const result = inmueble
-      ? await actualizarInmueble(inmueble.id, payload)
-      : await crearInmueble(payload);
+    const result = await lugar.guardar(async (ub) =>
+      inmueble ? await actualizarInmueble(inmueble.id, payload, ub) : await crearInmueble(payload, ub)
+    );
+    if (!result) return;
 
     if (!result.success) {
       const primerError = Object.values(result.error).flat()[0];
@@ -184,6 +188,7 @@ export function InmuebleForm({
 
   return (
     <FormShell onSubmit={handleSubmit(onSubmit)} noValidate className="max-w-4xl">
+      <AvisoUbicacion lugar={lugar} className="mt-4" />
       <FormSection
         title="Ubicación"
         description="La referencia es el código interno con el que se busca el inmueble. El bloque agrupa los pisos del mismo edificio."
@@ -487,7 +492,7 @@ export function InmuebleForm({
         <Button type="button" variant="ghost" onClick={() => router.back()}>
           Cancelar
         </Button>
-        <Button type="submit" size="lg" disabled={isSubmitting}>
+        <Button type="submit" size="lg" disabled={isSubmitting || lugar.bloqueado}>
           {isSubmitting ? "Guardando…" : inmueble ? "Guardar cambios" : "Crear inmueble"}
         </Button>
       </FormActions>

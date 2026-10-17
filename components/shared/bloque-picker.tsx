@@ -18,6 +18,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AvisoUbicacion } from "@/components/ubicacion/aviso-ubicacion";
+import { useLugar, type SinFallo } from "@/components/ubicacion/ubicacion-provider";
 import { Field } from "@/components/shared/form";
 import { ZonaPunto } from "@/components/zonas/zona-badge";
 import { ZonaSelect } from "@/components/zonas/zona-select";
@@ -226,6 +228,8 @@ function NuevoBloqueDialog({
   onCreated: (bloque: BloqueSeleccionado) => void;
 }) {
   const [isPending, startTransition] = useTransition();
+  // Checked when the property form opened: the shared state is reused here.
+  const lugar = useLugar();
   const [errores, setErrores] = useState<Record<string, string[] | undefined>>({});
   const [zonaId, setZonaId] = useState(defaultZona ?? "");
   // A new opening starts from the zone captured for it.
@@ -249,15 +253,16 @@ function NuevoBloqueDialog({
       zonaId,
     };
     startTransition(async () => {
-      let result: Awaited<ReturnType<typeof crearBloque>>;
+      let result: SinFallo<Awaited<ReturnType<typeof crearBloque>>> | null;
       try {
-        result = await crearBloque(data);
+        result = await lugar.guardar((ub) => crearBloque(data, ub));
       } catch {
         // Keep the user on the property form (and what they typed) instead of
         // bubbling up to the error page when the server is unreachable.
         toast.error("No se pudo crear el bloque. Revisa la conexión e inténtalo de nuevo.");
         return;
       }
+      if (!result) return;
       if (!result.success) {
         setErrores(result.error);
         return;
@@ -278,6 +283,7 @@ function NuevoBloqueDialog({
               Calle, número y localidad identifican el edificio. Luego podrás añadirle más datos desde Bloques.
             </DialogDescription>
           </DialogHeader>
+          <AvisoUbicacion lugar={lugar} />
           <div className="grid gap-4 sm:grid-cols-[1fr_6rem]">
             <Field label="Calle" htmlFor="nb-calle" error={errores.calle?.[0]}>
               <Input id="nb-calle" name="calle" placeholder="C/ Estrellas" autoFocus aria-invalid={!!errores.calle} />
@@ -304,7 +310,7 @@ function NuevoBloqueDialog({
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={isPending}>
+            <Button type="submit" disabled={isPending || lugar.bloqueado}>
               {isPending ? "Creando…" : "Crear bloque"}
             </Button>
           </DialogFooter>

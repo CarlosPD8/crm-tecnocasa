@@ -5,7 +5,9 @@ import { revalidatePath } from "next/cache";
 import { esUnicoViolado, getContexto, SIN_PERMISO, type Contexto, type DbOficina } from "@/lib/db";
 import { cambioZona, frase, incluirCambiosZona, nombresAsesores, registrarActividad } from "@/lib/actividad";
 import { moverYBorrarZona } from "@/lib/zonas";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { zonaSchema, type ZonaInput } from "@/lib/validations/zona";
+import { formaZonaSchema, type FormaZona } from "@/lib/validations/ubicacion";
 
 // Zones and who works them: director only (the scope extension also refuses
 // any write on zones from an advisor).
@@ -157,5 +159,34 @@ export async function eliminarZona(id: string, destinoId: string | null) {
   });
 
   revalidarTodo();
+  return { success: true as const };
+}
+
+/** The contour drawn on the map (null clears it). Advisors are checked against it from their next save. */
+export async function guardarFormaZona(id: string, forma: FormaZona | null) {
+  const ctx = await contextoDirector();
+  if (!ctx) return SIN_PERMISO;
+
+  const parsed = forma === null ? null : formaZonaSchema.safeParse(forma);
+  if (parsed && !parsed.success) {
+    return { success: false as const, error: parsed.error.issues[0]?.message ?? "El contorno no es válido." };
+  }
+  const zona = await ctx.db.zona.findUnique({ where: { id }, select: { nombre: true, forma: true } });
+  if (!zona) return { success: false as const, error: "Esta zona ya no existe." };
+  const nueva = parsed?.data ?? null;
+  if (!zona.forma && !nueva) return { success: true as const };
+
+  await ctx.db.$transaction(async (tx) => {
+    await tx.zona.update({ where: { id }, data: { forma: nueva ?? Prisma.DbNull } });
+    await registrarActividad(tx, {
+      accion: "CAMBIO",
+      entidad: "ZONA",
+      entidadId: id,
+      enlace: "/zonas",
+      resumen: frase.formaZona(zona.nombre, zona.forma !== null, nueva !== null),
+    });
+  });
+
+  revalidatePath("/zonas");
   return { success: true as const };
 }

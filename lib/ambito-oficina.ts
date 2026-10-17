@@ -20,6 +20,12 @@ export { ErrorAmbito };
  *   triggers `crm_misma_oficina` reject ids of another office.
  * - An advisor can't touch zones or their assignments, nor move a block or a
  *   property to another zone, nor create one in a zone that isn't theirs.
+ * - `soloLectura`: every write throws, whatever the model. With the location
+ *   control on, an advisor's `ctx.db` is like this until the action has checked
+ *   where they are (`getContextoEscritura` in lib/db.ts).
+ * - `lugar`: the checked place, stamped on every activity line written.
+ * - The office row can be read; without a zone scope (a director), its location
+ *   settings can also be updated, and nothing else.
  *
  * Nested reads are safe across offices: the triggers guarantee every relation
  * stays inside the office. Relation filters in `where` (`some`, `none`…) only
@@ -41,8 +47,12 @@ const LECTURA = new Set([
 ]);
 const ACTUALIZAR = new Set(["update", "updateMany", "updateManyAndReturn"]);
 const CREAR = new Set(["create", "createMany", "createManyAndReturn"]);
-// The office itself can only be read, and only its own row.
+// The office itself can only be read, and only its own row…
 const LECTURA_OFICINA = new Set(["findUnique", "findUniqueOrThrow", "findFirst", "findFirstOrThrow"]);
+// …except its location settings, which a director changes (lib/actions/ubicacion.ts).
+const AJUSTES_OFICINA = new Set([
+  "controlUbicacion", "controlUbicacionDesde", "latitud", "longitud", "radioMetros", "redes",
+]);
 // Models whose rows carry a zone.
 const CON_ZONA = new Set(["Bloque", "Inmueble"]);
 
@@ -59,11 +69,23 @@ function comprobarDatos(modelo: string, datos: Datos, crear: boolean) {
   }
 }
 
+export type OpcionesDb = {
+  /** Reject every write, with this message. */
+  soloLectura?: string;
+  /** Where the user is (location control), stamped on new activity lines. */
+  lugar?: string;
+};
+
 /**
  * `zonas`: the advisor's zone ids, or null for no zone scope (directors, the
  * seed, scripts and tests).
  */
-export function extensionOficina(oficinaId: string, usuarioId: string, zonas: readonly string[] | null = null) {
+export function extensionOficina(
+  oficinaId: string,
+  usuarioId: string,
+  zonas: readonly string[] | null = null,
+  opciones: OpcionesDb = {}
+) {
   const vis = zonas ? visibilidad({ usuarioId, zonas }) : null;
 
   function datosNuevos(modelo: string, datos: Datos): Datos {
@@ -71,9 +93,10 @@ export function extensionOficina(oficinaId: string, usuarioId: string, zonas: re
     if (zonas && CON_ZONA.has(modelo) && !zonas.includes(datos.zonaId as string)) {
       throw new ErrorAmbito(`${modelo}: solo puedes crear en tus zonas`);
     }
+    const conLugar = modelo === "Actividad" && opciones.lugar !== undefined ? { ...datos, lugar: opciones.lugar } : datos;
     return CON_AUTOR.has(modelo)
-      ? { ...datos, oficinaId, creadoPorId: usuarioId }
-      : { ...datos, oficinaId };
+      ? { ...conLugar, oficinaId, creadoPorId: usuarioId }
+      : { ...conLugar, oficinaId };
   }
 
   return Prisma.defineExtension({
@@ -83,9 +106,21 @@ export function extensionOficina(oficinaId: string, usuarioId: string, zonas: re
         if (!model) {
           throw new ErrorAmbito(`${operation} no está permitido con el cliente de oficina`);
         }
+        if (opciones.soloLectura && !LECTURA.has(operation)) {
+          throw new ErrorAmbito(`${model}.${operation}: ${opciones.soloLectura}`);
+        }
         const a = { ...(args as Record<string, unknown>) };
 
         if (model === "Oficina") {
+          if (operation === "update" && !vis) {
+            const campos = Object.keys((a.data as Datos | undefined) ?? {});
+            const ajeno = campos.find((c) => !AJUSTES_OFICINA.has(c));
+            if (ajeno || campos.length === 0) {
+              throw new ErrorAmbito(`Oficina.${ajeno ?? "update"} no está permitido con el cliente de oficina`);
+            }
+            a.where = { id: oficinaId };
+            return query(a);
+          }
           if (!LECTURA_OFICINA.has(operation)) {
             throw new ErrorAmbito(`Oficina.${operation} no está permitido con el cliente de oficina`);
           }

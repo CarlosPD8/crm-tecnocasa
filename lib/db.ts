@@ -5,8 +5,11 @@ import { after } from "next/server";
 
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
-import { extensionOficina } from "@/lib/ambito-oficina";
+import { extensionOficina, type OpcionesDb } from "@/lib/ambito-oficina";
 import { registrarActividad } from "@/lib/actividad";
+import { comprobarLugar } from "@/lib/ubicacion/servidor";
+import type { DatosOficina } from "@/lib/ubicacion/lugar";
+import type { FalloUbicacion, UbicacionEnviada } from "@/lib/validations/ubicacion";
 import { Prisma } from "@/lib/generated/prisma/client";
 import type { RolUsuario } from "@/lib/generated/prisma/enums";
 
@@ -17,8 +20,13 @@ import type { RolUsuario } from "@/lib/generated/prisma/enums";
  */
 
 /** `zonas`: an advisor's zone ids; null (director) sees the whole office. */
-export function crearDbOficina(oficinaId: string, usuarioId: string, zonas: readonly string[] | null = null) {
-  return prisma.$extends(extensionOficina(oficinaId, usuarioId, zonas));
+export function crearDbOficina(
+  oficinaId: string,
+  usuarioId: string,
+  zonas: readonly string[] | null = null,
+  opciones: OpcionesDb = {}
+) {
+  return prisma.$extends(extensionOficina(oficinaId, usuarioId, zonas, opciones));
 }
 
 export type DbOficina = ReturnType<typeof crearDbOficina>;
@@ -30,6 +38,13 @@ export type Contexto = {
   esDirector: boolean;
   /** The advisor's zone ids; null for a director, who sees every zone. */
   zonas: string[] | null;
+  /**
+   * Whether saving requires being in a zone or at the office: the office has
+   * the location control on and the user is an advisor. Then `db` only reads;
+   * write actions get a writable one from `getContextoEscritura`.
+   */
+  controlUbicacion: boolean;
+  ubicacionOficina: DatosOficina;
   /** Scoped to the office and, for an advisor, to their zones. */
   db: DbOficina;
 };
@@ -47,7 +62,18 @@ export const getSesionPerfil = cache(async () => {
   const usuario = await prisma.usuario.findUnique({
     where: { id },
     include: {
-      oficina: { select: { id: true, nombre: true, activa: true } },
+      oficina: {
+        select: {
+          id: true,
+          nombre: true,
+          activa: true,
+          controlUbicacion: true,
+          latitud: true,
+          longitud: true,
+          radioMetros: true,
+          redes: true,
+        },
+      },
       zonasAsignadas: { select: { zonaId: true } },
     },
   });
@@ -87,6 +113,9 @@ function anotarAcceso(usuario: { id: string; oficinaId: string; ultimoAcceso: Da
   });
 }
 
+/** What a write gets if it skipped the location check (a bug: see estructura.test.ts). */
+const SIN_LUGAR = "escritura sin comprobar la ubicación (usa getContextoEscritura)";
+
 type Resolucion =
   | { estado: "ok"; ctx: Contexto }
   | { estado: "sin-sesion" | "sin-acceso" | "cambiar-contrasena" };
@@ -103,15 +132,29 @@ const resolverContexto = cache(async (): Promise<Resolucion> => {
 
   const esDirector = usuario.rol === "DIRECTOR";
   const zonas = esDirector ? null : usuario.zonasAsignadas.map((z) => z.zonaId);
+  const { oficina } = usuario;
+  const controlUbicacion = oficina.controlUbicacion && !esDirector;
   return {
     estado: "ok",
     ctx: {
       usuario: { id: usuario.id, nombre: usuario.nombre, email: usuario.email, rol: usuario.rol },
-      oficina: { id: usuario.oficina.id, nombre: usuario.oficina.nombre },
+      oficina: { id: oficina.id, nombre: oficina.nombre },
       oficinaId: usuario.oficinaId,
       esDirector,
       zonas,
-      db: crearDbOficina(usuario.oficinaId, usuario.id, zonas),
+      controlUbicacion,
+      ubicacionOficina: {
+        latitud: oficina.latitud,
+        longitud: oficina.longitud,
+        radioMetros: oficina.radioMetros,
+        redes: oficina.redes,
+      },
+      db: crearDbOficina(
+        usuario.oficinaId,
+        usuario.id,
+        zonas,
+        controlUbicacion ? { soloLectura: SIN_LUGAR } : {}
+      ),
     },
   };
 });
@@ -127,6 +170,32 @@ export async function getContexto(): Promise<Contexto> {
   const r = await resolverContexto();
   if (r.estado !== "ok") redirect(DESTINO[r.estado]);
   return r.ctx;
+}
+
+export type ContextoEscritura =
+  | (Contexto & { ok: true; lugar: string | null })
+  | { ok: false; fallo: FalloUbicacion };
+
+/**
+ * For server actions that save data. Like `getContexto`, but with the location
+ * control on (an advisor in an office that has it), it first checks they are in
+ * one of their zones or at the office, and fails with a message otherwise.
+ * The returned `db` writes, and stamps the place on the activity lines.
+ *
+ *   const ctx = await getContextoEscritura(ub);
+ *   if (!ctx.ok) return ctx.fallo;
+ */
+export async function getContextoEscritura(ub: UbicacionEnviada): Promise<ContextoEscritura> {
+  const ctx = await getContexto();
+  if (!ctx.controlUbicacion) return { ...ctx, ok: true, lugar: null };
+  const r = await comprobarLugar(ctx, ub);
+  if (!r.ok) return { ok: false, fallo: { success: false, error: r.mensaje, ubicacion: r.motivo } };
+  return {
+    ...ctx,
+    ok: true,
+    lugar: r.lugar,
+    db: crearDbOficina(ctx.oficinaId, ctx.usuario.id, ctx.zonas, { lugar: r.lugar }),
+  };
 }
 
 /** For director-only pages: anyone else gets a 404, as if it didn't exist. */
@@ -173,7 +242,7 @@ export async function existe(db: DbOficina, modelo: ModeloOficina, id: string | 
  * them (see `buscarClientes`). Never for listing.
  */
 export function dbSinZonas(ctx: Contexto): DbOficina {
-  return ctx.zonas ? crearDbOficina(ctx.oficinaId, ctx.usuario.id) : ctx.db;
+  return crearDbOficina(ctx.oficinaId, ctx.usuario.id, null, { soloLectura: "dbSinZonas es solo para buscar" });
 }
 
 /** Like `existe`, but anywhere in the office (a client found by exact DNI or phone). */

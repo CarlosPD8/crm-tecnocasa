@@ -4,15 +4,18 @@ import { useTransition } from "react";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 
+import { useLugar } from "@/components/ubicacion/ubicacion-provider";
 import { eliminarArchivo } from "@/lib/actions/archivos";
 import { Button } from "@/components/ui/button";
 
 export function EliminarArchivoButton({ archivoId, nombre }: { archivoId: string; nombre: string }) {
   const [isPending, startTransition] = useTransition();
+  const { guardar } = useLugar();
 
   function handleDelete() {
     startTransition(async () => {
-      const result = await eliminarArchivo(archivoId);
+      const result = await guardar((ub) => eliminarArchivo(archivoId, ub));
+      if (!result) return;
       if (!result.success) {
         toast.error(result.error);
         return;

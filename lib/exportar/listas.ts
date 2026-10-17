@@ -148,6 +148,7 @@ export async function exportar(request: NextRequest, entidad: Entidad) {
         texto("Qué hizo", (f) => f.resumen, 60),
         texto("Cambios", cambios, 50),
         texto("Nota", (f) => f.detalle, 50),
+        texto("Lugar", (f) => f.lugar, 18),
       ],
       "actividad"
     );

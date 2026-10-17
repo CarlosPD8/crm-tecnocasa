@@ -287,7 +287,7 @@ export function consultaActividad(sp: SP, ahora = new Date()) {
   if (tipos.length) and.push({ accion: { in: tipos as (keyof typeof ACCION_LABELS)[] } });
 
   const q = sp.q?.trim();
-  if (q) and.push({ OR: [{ resumen: contiene(q) }, { detalle: contiene(q) }] });
+  if (q) and.push({ OR: [{ resumen: contiene(q) }, { detalle: contiene(q) }, { lugar: contiene(q) }] });
 
   return { where: { AND: and } satisfies Prisma.ActividadWhereInput, dias };
 }

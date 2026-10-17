@@ -1,18 +1,46 @@
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 import { FileText, Home, MapPinned, Star, Target } from "lucide-react";
 
 import { getContexto } from "@/lib/db";
+import { fechaCorta } from "@/lib/actividad";
 import { colorZona } from "@/lib/validations/zona";
+import { formaZonaSchema } from "@/lib/validations/ubicacion";
+import { ipDeLaPeticion } from "@/lib/ubicacion/servidor";
+import { esIpPublica, redDeIp } from "@/lib/ubicacion/red";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ZonaDialog } from "@/components/zonas/zona-dialog";
 import { EliminarZonaDialog } from "@/components/zonas/eliminar-zona-dialog";
+import { DibujarZonaDialog } from "@/components/zonas/dibujar-zona-dialog";
+import { ControlUbicacion } from "@/components/zonas/control-ubicacion";
+import { Mapa, type ZonaMapa } from "@/components/mapa/mapa";
 import { Button } from "@/components/ui/button";
 
-export default async function ZonasPage() {
-  const { db, esDirector, zonas: misZonas } = await getContexto();
+/** Office settings and checks for the location control card (director only). */
+async function datosControl(ctx: Awaited<ReturnType<typeof getContexto>>) {
+  const [oficina, sinZona, ip] = await Promise.all([
+    ctx.db.oficina.findFirst({ select: { controlUbicacion: true, controlUbicacionDesde: true } }),
+    ctx.db.usuario.findMany({
+      where: { rol: "ASESOR", activo: true, zonasAsignadas: { none: {} } },
+      select: { nombre: true },
+      orderBy: { nombre: "asc" },
+    }),
+    ipDeLaPeticion(),
+  ]);
+  return {
+    activo: oficina?.controlUbicacion ?? false,
+    desde: fechaCorta(oficina?.controlUbicacionDesde ?? null),
+    redActual: { red: ip ? redDeIp(ip) : null, publica: ip ? esIpPublica(ip) : false },
+    asesoresSinZona: sinZona.map((u) => u.nombre),
+  };
+}
 
-  const [zonas, captacion, asesores] = await Promise.all([
+export default async function ZonasPage() {
+  const ctx = await getContexto();
+  const { db, esDirector, zonas: misZonas, ubicacionOficina } = ctx;
+
+  const [zonas, captacion, asesores, control] = await Promise.all([
     db.zona.findMany({
       // An advisor sees only theirs; the badges elsewhere still name any zone.
       where: misZonas ? { id: { in: misZonas } } : undefined,
@@ -22,6 +50,7 @@ export default async function ZonasPage() {
         nombre: true,
         color: true,
         notas: true,
+        forma: true,
         asesores: {
           select: { usuario: { select: { id: true, nombre: true, activo: true } } },
           orderBy: { usuario: { nombre: "asc" } },
@@ -37,7 +66,18 @@ export default async function ZonasPage() {
           orderBy: [{ activo: "desc" }, { nombre: "asc" }],
         })
       : [],
+    esDirector ? datosControl(ctx) : null,
   ]);
+
+  const enMapa: ZonaMapa[] = zonas.map((z) => ({
+    id: z.id,
+    nombre: z.nombre,
+    color: colorZona(z.color).valor,
+    forma: formaZonaSchema.safeParse(z.forma).data ?? null,
+  }));
+  const { latitud, longitud, radioMetros } = ubicacionOficina;
+  const oficina = latitud !== null && longitud !== null ? { lat: latitud, lng: longitud, radio: radioMetros } : null;
+  const hayMapa = Boolean(oficina) || enMapa.some((z) => z.forma);
 
   const marcas = (zonaId: string, tipo: "NOTICIA" | "POTENCIAL") =>
     captacion.find((c) => c.zonaId === zonaId && c.captacion === tipo)?._count._all ?? 0;
@@ -59,6 +99,27 @@ export default async function ZonasPage() {
         actions={esDirector && <ZonaDialog asesores={asesores} />}
       />
 
+      {(hayMapa || control) && (
+        <div className={cn("grid gap-4", control && "lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] lg:items-start")}>
+          {hayMapa ? (
+            <Mapa zonas={enMapa} oficina={oficina} className="h-80 lg:h-[30rem]" />
+          ) : (
+            <div className="grid h-80 place-items-center rounded-xl border border-dashed border-border px-6 text-center text-sm text-muted-foreground lg:h-[30rem]">
+              Marca la oficina en el mapa y dibuja el contorno de cada zona para verlas aquí.
+            </div>
+          )}
+          {control && (
+            <ControlUbicacion
+              {...control}
+              oficina={oficina}
+              redes={ubicacionOficina.redes}
+              zonasSinContorno={enMapa.filter((z) => !z.forma).map((z) => z.nombre)}
+              zonas={enMapa}
+            />
+          )}
+        </div>
+      )}
+
       {total === 0 ? (
         <EmptyState
           icon={MapPinned}
@@ -72,6 +133,7 @@ export default async function ZonasPage() {
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {zonas.map((zona, i) => {
+            const mapa = enMapa[i];
             const noticias = marcas(zona.id, "NOTICIA");
             const potenciales = marcas(zona.id, "POTENCIAL");
             return (
@@ -83,7 +145,14 @@ export default async function ZonasPage() {
                 <div aria-hidden className="h-1.5" style={{ backgroundColor: colorZona(zona.color).valor }} />
                 <div className="flex flex-1 flex-col gap-4 p-5">
                   <div className="flex flex-col gap-1">
-                    <h2 className="font-display text-3xl leading-none">{zona.nombre}</h2>
+                    <h2 className="flex items-baseline justify-between gap-2 font-display text-3xl leading-none">
+                      {zona.nombre}
+                      {esDirector && !mapa.forma && (
+                        <span className="rounded-full bg-warning/15 px-2 py-0.5 font-sans text-xs font-medium text-warning">
+                          Sin contorno
+                        </span>
+                      )}
+                    </h2>
                     <p className="text-sm text-muted-foreground">
                       {zona.asesores.length
                         ? zona.asesores
@@ -140,6 +209,7 @@ export default async function ZonasPage() {
                     )}
                     {esDirector && (
                       <span className="ml-auto flex items-center">
+                        <DibujarZonaDialog zona={mapa} zonas={enMapa} oficina={oficina} />
                         <ZonaDialog
                           asesores={asesores}
                           zona={{

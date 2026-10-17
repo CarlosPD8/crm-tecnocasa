@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { esUnicoViolado, getContexto, resolverZona, SIN_PERMISO, type DbOficina } from "@/lib/db";
+import { esUnicoViolado, getContexto, getContextoEscritura, resolverZona, SIN_PERMISO, type DbOficina } from "@/lib/db";
+import type { UbicacionEnviada } from "@/lib/validations/ubicacion";
 import { bloqueSchema, formatBloque, type BloqueInput } from "@/lib/validations/bloque";
 import { cambioBloque, frase, incluirCambiosBloque, registrarActividad } from "@/lib/actividad";
 
@@ -46,8 +47,9 @@ async function existeOtro(db: DbOficina, data: BloqueInput, excluirId?: string) 
   return Boolean(otro);
 }
 
-export async function crearBloque(data: BloqueInput) {
-  const ctx = await getContexto();
+export async function crearBloque(data: BloqueInput, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
   const { db } = ctx;
   const parsed = bloqueSchema.safeParse(data);
   if (!parsed.success) {
@@ -91,8 +93,9 @@ export async function crearBloque(data: BloqueInput) {
   };
 }
 
-export async function actualizarBloque(id: string, data: BloqueInput) {
-  const ctx = await getContexto();
+export async function actualizarBloque(id: string, data: BloqueInput, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
   const { db } = ctx;
   const parsed = bloqueSchema.safeParse(data);
   if (!parsed.success) {
@@ -131,8 +134,10 @@ export async function actualizarBloque(id: string, data: BloqueInput) {
   return { success: true as const, bloqueId: id };
 }
 
-export async function eliminarBloque(id: string) {
-  const { db, esDirector } = await getContexto();
+export async function eliminarBloque(id: string, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
+  const { db, esDirector } = ctx;
   if (!esDirector) return SIN_PERMISO;
 
   const pisos = await db.inmueble.count({ where: { bloqueId: id } });

@@ -28,7 +28,7 @@ export function ContactoInmuebleForm({
   return (
     <ContactoForm
       proximoActual={proximoActual}
-      registrar={(data) => crearContactoInmueble(inmuebleId, { ...data, clienteId: persona?.id ?? "" })}
+      registrar={(data, ub) => crearContactoInmueble(inmuebleId, { ...data, clienteId: persona?.id ?? "" }, ub)}
     >
       <Field
         label="Persona contactada"

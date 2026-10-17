@@ -95,6 +95,7 @@ export default async function ActividadPage({
           resumen: true,
           detalle: true,
           cambios: true,
+          lugar: true,
           creadoPorId: true,
         },
       })

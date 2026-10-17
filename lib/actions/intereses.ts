@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { dbSinZonas, getContexto } from "@/lib/db";
+import { dbSinZonas, getContextoEscritura } from "@/lib/db";
+import type { UbicacionEnviada } from "@/lib/validations/ubicacion";
 import { registrarActividad } from "@/lib/actividad";
 
-export async function agregarInteres(inmuebleId: string, clienteId: string) {
-  const ctx = await getContexto();
+export async function agregarInteres(inmuebleId: string, clienteId: string, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
   const { db } = ctx;
 
   // Any client of the office (found by exact DNI or phone): see buscarClientes.
@@ -40,8 +42,10 @@ export async function agregarInteres(inmuebleId: string, clienteId: string) {
   return { success: true as const };
 }
 
-export async function quitarInteres(interesId: string) {
-  const { db } = await getContexto();
+export async function quitarInteres(interesId: string, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
+  const { db } = ctx;
 
   const interes = await db.interes.findUnique({
     where: { id: interesId },

@@ -1,6 +1,6 @@
 # Cambios pendientes
 
-Peticiones de la oficina piloto tras la presentación (septiembre 2026) y otros pendientes conocidos. Es el punto de partida para las próximas sesiones de trabajo: nada de esto está implementado.
+Peticiones de la oficina piloto tras la presentación (septiembre 2026) y otros pendientes conocidos. El estado de cada uno está en el resumen.
 
 Estado de cada punto:
 
@@ -14,15 +14,15 @@ Estado de cada punto:
 | # | Cambio | Estado | Esfuerzo | Depende de |
 |---|---|---|---|---|
 | 1 | Marca «Noticia» | Hecho y desplegado (14/10/2026) | ½ día | — |
-| 2 | Registro de actividad | Hecho y migrado; falta desplegar | 2–3 días | — |
-| 3 | Subzonas dentro de la oficina | Hecho; falta migrar y desplegar | 5,5–6,5 días | — |
-| 4 | Registrar solo desde la zona o la oficina (ubicación) | Pendiente del cliente | ~3,5 días | 2 y 3 |
-| 5 | Exportar a PDF apaisado | Hecho; falta desplegar | 1 día | — |
-| — | Importador de Excel | Necesario antes del piloto | por estimar | su Excel real |
+| 2 | Registro de actividad | Hecho y desplegado | 2–3 días | — |
+| 3 | Subzonas dentro de la oficina | Desplegado (15/10/2026); falta el paso de contraer | 5,5–6,5 días | — |
+| 4 | Registrar solo desde la zona o la oficina (ubicación) | Hecho (16/10/2026); falta migrar y desplegar | ~7 días | 2 y 3 |
+| 5 | Exportar a PDF apaisado | Hecho y desplegado | 1 día | — |
+| — | Importador de Excel | Esperando 3 respuestas del cliente | ~2 días | su Excel real |
 
-Orden propuesto: 1 → 2 → 3 → 5 → 4. El registro de actividad va antes porque es la base de los controles del punto 4.
+Orden seguido: 1 → 2 → 3 → 5 → 4. El registro de actividad fue antes porque es la base de los controles del punto 4.
 
-Total aproximado: 10–12 días. El dosier incluye solo 2 h de mejoras al mes por oficina, así que esto es inversión en el producto o se cobra aparte: lo decide el usuario antes de empezar.
+Total aproximado: 16–18 días. El dosier incluye solo 2 h de mejoras al mes por oficina, así que esto es inversión en el producto o se cobra aparte: lo decide el usuario antes de empezar.
 
 ---
 
@@ -139,54 +139,91 @@ La migración ya está aplicada en producción (14/10/2026): solo falta el push 
 4. ¿Quién gestiona las zonas? **Solo el director**, una a una (sin movimientos en bloque).
 5. ¿Clientes repetidos entre zonas? **Enlazarlos por DNI o teléfono.**
 6. ¿Hoja de zona en PDF? Filtran los pisos con los que van a trabajar y los imprimen en un solo PDF: la «Hoja para la calle».
-7. ¿Mapa? **Más adelante**, con el punto 4 (se añadirá `Zona.forma`).
+7. ¿Mapa? **Más adelante**, con el punto 4: hecho allí (`Zona.forma`, dibujado en Zonas).
 
 ---
 
 ## 4. Registrar solo desde la zona o la oficina (ubicación)
 
-**Qué piden.** Que un asesor solo pueda meter datos si está físicamente en su zona. Para que no bloquee el trabajo de oficina, el usuario propuso permitir **su zona + la oficina**: fuera de esos dos sitios, no puede registrar.
+**Estado (16/10/2026): implementado; falta migrar y desplegar.** El control llega **apagado** en todas las oficinas: desplegar no cambia nada hasta que el director lo enciende.
 
-**Diseño propuesto.**
+**Qué piden.** Que un asesor solo pueda meter datos estando en su zona o en la oficina; fuera de esos sitios, no.
 
-- **Lugares permitidos para cada asesor:**
-  - su zona, el polígono del punto 3;
-  - la oficina, su dirección con un radio de ~150–200 m.
-- **El director:** puede registrar desde cualquier sitio.
-- **Al guardar:** el navegador envía la posición (Geolocation API, con permiso la primera vez) y el **servidor** comprueba si cae dentro. Si está fuera, sale un mensaje claro («Estás fuera de tu zona y de la oficina. Podrás registrarlo cuando vuelvas»). Consultar datos sigue permitido siempre.
-- **Indicador en la cabecera:** *En tu zona / En la oficina / Fuera*.
-- **Red de la oficina:** para los ordenadores fijos, cuya ubicación por navegador puede ser muy imprecisa, el director pulsa una vez «Esta es la red de la oficina» y se guarda la IP pública. Lo que llegue desde esa IP cuenta como «en la oficina», y es más difícil de falsificar que el GPS. Si la IP cambia, el director vuelve a pulsarlo.
-- **Señal débil:** margen según la precisión que dé el móvil. Si es muy mala, «Señal de ubicación débil, espera unos segundos o acércate a una ventana».
-- **Permisos temporales:** el director puede dar uno («Marta puede registrar desde cualquier sitio hoy»).
-- **Histórico:** cada registro guarda su ubicación en el registro de actividad (punto 2), y el director puede verla.
+**Decisiones del cliente (16/10/2026):**
+- **Se bloquea todo lo que guarde datos:** pisos, bloques, clientes, contactos, citas (también arrastrarlas en el calendario y mover el próximo contacto), operaciones, interesados y documentos. Consultar se puede siempre.
+- **Basta con estar en cualquiera de sus zonas** para guardar cualquier cosa que vea.
+- **Sin excepciones:** no hay permisos temporales.
+- **El director** registra desde cualquier sitio.
+- **Cuándo se mira:** al abrir un formulario (en los de dentro de una ficha, al primer toque) y otra vez al guardar. Nunca de forma continua, y sin indicador en la cabecera.
+- **Histórico:** solo el lugar («En Zaidín», «En la oficina», «Desde la red de la oficina»), nunca coordenadas.
+- **Activación:** un interruptor del director, apagado de serie.
+- **Ordenador fijo en la oficina:** no lo sabían, así que va incluida la «red de la oficina».
 
-**Limitaciones que el cliente debe conocer.**
-- **No es infalible:** con la ubicación simulada en el móvil se puede engañar. El servidor no puede verificar el GPS, pero el histórico con las ubicaciones permite detectar patrones raros.
+**Lo hecho:**
+- **Lugares válidos para un asesor:**
+  - el **contorno de sus zonas**, que el director dibuja en un mapa de OpenStreetMap (`Zona.forma`);
+  - la **oficina**, un punto con un radio de 150 m, ajustable entre 50 y 1.000;
+  - la **red de la oficina**: la IP pública que el director marca con «Esta es la red de la oficina» desde un equipo conectado a ella. Lo que llega por esa conexión cuenta como oficina sin mirar el GPS (sirve para los ordenadores fijos). Se guardan como mucho 5 redes; para IPv6, el prefijo /64.
+- **Margen:** el que dé la precisión del móvil, con un máximo de 50 m.
+  - con una precisión peor que 150 m: «Señal de ubicación débil, espera unos segundos o acércate a una ventana»;
+  - peor que 1 km (ubicación aproximada del móvil): pide activar la ubicación exacta.
+- **Lo decide el servidor:**
+  - cada acción que guarda empieza por `getContextoEscritura(ub)` (`lib/db.ts`);
+  - con el control encendido, el `ctx.db` de un asesor es de solo lectura, así que una escritura que olvide comprobarlo falla;
+  - un test (`tests/estructura.test.ts`) obliga a que cada acción nueva sea de lectura o compruebe la ubicación.
+- **En el navegador:**
+  - los formularios muestran «Estás fuera de tu zona y de la oficina. Podrás registrarlo cuando vuelvas» antes de escribir, y desactivan Guardar;
+  - si el permiso está denegado, se explica cómo darlo en iPhone, Android u ordenador;
+  - en el calendario, la cita arrastrada vuelve a su sitio.
+- **Pantalla Zonas:**
+  - un mapa con las zonas y la oficina (el asesor ve las suyas);
+  - **para el director**, la tarjeta «Control de ubicación»:
+    - marcar la oficina en el mapa;
+    - las redes;
+    - los avisos de zonas sin contorno y de asesores sin zona (esos solo pueden registrar desde la oficina);
+    - «Comprobar dónde estoy», para revisar los contornos paseando;
+    - el interruptor, que exige tener la oficina marcada y confirmar «He informado por escrito a los asesores»;
+  - en cada zona, «Dibujar» o «Contorno».
+- **Registro de actividad:**
+  - cada línea guardada con el control encendido lleva su lugar, que el director ve en Actividad, en su Excel y en la búsqueda;
+  - quedan registrados los cambios de contornos, de oficina, de redes y del interruptor.
+- **Datos de demo:** la oficina en Puerta Real y contornos aproximados de Zaidín, Centro y Albaicín-Realejo, con el control apagado.
+
+**Despliegue:**
+1. `npx.cmd prisma migrate deploy` (migración `20261016090000_ubicacion`). Solo añade columnas y es compatible con la versión desplegada.
+2. Push a Vercel.
+3. En Demo: el seed pone la oficina y los contornos (opcional). Si no, se marcan a mano en Zonas.
+
+**Para activarlo en una oficina:**
+1. Marcar la oficina en el mapa.
+2. Dibujar el contorno de cada zona.
+3. Marcar la red de la oficina desde su Wi-Fi o su cable.
+4. Entregar a los asesores el aviso por escrito (modelo en `docs/aviso-ubicacion.md`).
+5. Encender el interruptor.
+
+Para volver atrás basta con apagarlo: se aplica en el siguiente guardado.
+
+**Limitaciones que el cliente debe conocer:**
+- **No es infalible:** el GPS simulado no se detecta. El histórico de lugares ayuda a ver patrones raros.
+- **iPhone:** necesita la «Ubicación exacta» activada para Safari, que a veces vuelve a pedir el permiso. En Android 12 o posterior, la ubicación aproximada se bloquea con su mensaje.
+- **Red de la oficina:**
+  - si el operador cambia la IP, el director la vuelve a marcar;
+  - si el operador usa CGNAT, la IP pública se comparte con otros clientes suyos, que también contarían como oficina: conviene una IP fija;
+  - con VPN o iCloud Private Relay, ese móvil usa el GPS;
+  - la IP solo es fiable mientras la app se sirva directamente desde Vercel, sin un proxy delante.
 - **Aviso legal (RGPD y art. 90 de la LOPDGDD):**
   - hay que informar a los asesores **por escrito y antes** de activarlo;
-  - la ubicación se toma solo al guardar, nunca de forma continua;
-  - hace falta un contrato de encargo de tratamiento entre la oficina y Picaco.
+  - hace falta un contrato de encargo de tratamiento entre la oficina y Picaco;
+  - si los asesores son autónomos, que lo consulten con su asesoría.
 
-  Si los asesores son autónomos, que lo consulten con su asesoría laboral.
+**Preguntas al cliente (respondidas el 16/10/2026).**
+1. ¿Se bloquea todo o solo algunas acciones? **Todo lo que guarde datos.**
+2. ¿Tienen ordenador fijo? **No lo saben**: va incluida la red de la oficina.
+3. ¿Permisos temporales? **No.**
+4. ¿Una zona o varias por asesor? **Varias** (punto 3); basta con estar en cualquiera.
+5. ¿Asesores empleados o autónomos? **Sin responder**; afecta solo al aviso legal.
 
-**Alternativas ya comentadas**, por si prefieren algo menos rígido:
-- **A. Registrar sin bloquear:** guardar la ubicación y marcar «registrado fuera de zona» para el director.
-- **B. Bloquear solo lo de calle:** exigir estar a menos de 100–150 m del bloque solo para visitas, pisos nuevos y noticias.
-
-**Esfuerzo aproximado.** Las zonas ya existen (punto 3), pero falta su forma: dibujar el polígono de cada zona en un mapa (`Zona.forma`) va aquí, con ~1 día más.
-
-| Parte | Días |
-|---|---|
-| Ubicación y red de la oficina | 1 |
-| Comprobación al guardar en todas las acciones, más el indicador y los mensajes | 2 |
-| Permisos temporales del director | 0,5 |
-
-**Preguntas abiertas para el cliente.**
-1. ¿Se bloquea **todo** lo que sea registrar o modificar, o solo algunas acciones?
-2. ¿Tienen ordenador fijo en la oficina? ¿Va por cable o por Wi-Fi?
-3. ¿Quieren permisos temporales para trabajar fuera de zona?
-4. ~~¿Cada asesor tiene una sola zona, o alguno puede llevar varias?~~ Respondida en el punto 3: puede llevar varias.
-5. ¿Los asesores son empleados o autónomos? ¿Lo han consultado con su asesoría?
+**Esfuerzo:** unos 7 días. El documento decía unos 4,5. La diferencia sale de comprobar al abrir y al primer toque, el aviso en cada formulario, el flujo de activación y los tests.
 
 ---
 
@@ -253,6 +290,31 @@ Unos 26 € más si hiciera falta el mapa de pago.
 
 **Antes del piloto**
 - **Importador de Excel.** El dosier promete «lo que tengáis en Excel lo pasamos nosotros», y las oficinas llevan la captación en Excel. Diseñarlo con su archivo real delante: crear clientes, bloques e inmuebles relacionados, con un informe de filas dudosas.
+  - **Análisis del 15/10/2026** con `docs/+ PAJARITOS - BORRADO.xlsx`. Son 1.766 pisos que la oficina tuvo que quitar del CRM de Tecnocasa por saturación. Los datos son reales y el formato es el de exportación de Tecnocasa. Hay un archivo por zona y llegarán más.
+  - **Correspondencias:**
+    - `IN - dirección [planta puerta] - propietario` → piso, planta, puerta y propietario;
+    - la misma dirección repetida → bloque (106 direcciones);
+    - Noticia y «Potencial adquisición» → captación;
+    - «Ocupado por» → ocupación;
+    - «Comentario 1–4» con sus fechas (N–Q) → contactos;
+    - «Resumen zona» → notas;
+    - el archivo → la zona.
+  - **Limpieza necesaria:**
+    - unificar direcciones («C. Cisne 22» y «Calle Cisne 22»);
+    - interpretar planta y puerta («02 F», «2ºa», «04 DR», «ns»…);
+    - tratar como «sin propietario» los marcadores de propietario desconocido («Atico Tortola 25» ×322, «Anonimo», «Propietario 2 F Gaviota 2», vacío);
+    - unificar por teléfono los propietarios con varios pisos;
+    - aceptar celdas con dos teléfonos.
+  - **Diseño propuesto (~2 días):**
+    - un script con ensayo previo e informe, y después la importación real;
+    - repetible sin duplicar, reconociendo los pisos por dirección, planta y puerta;
+    - tipo y operación por defecto, y referencia automática;
+    - precio opcional, para no mostrar «0 €»;
+    - más adelante, una pantalla de importación para el director (3–4 días).
+  - **Preguntas al cliente (pendientes):**
+    1. ¿Qué es «Encargo» (7 pisos)?
+    2. ¿Puede Tecnocasa exportar más columnas (precio, tipo, venta o alquiler, DNI del propietario)?
+    3. ¿Los pisos importados llevan asesor responsable, o basta con la zona?
 - **Planes de pago.** Pasar Supabase y Vercel a Pro antes de meter datos reales. El plan gratuito de Vercel no permite uso comercial, y el de Supabase pausa el proyecto y no hace copias.
 - **Copia de seguridad de los documentos.** Las copias de Supabase no incluyen Storage. Con fotos descartadas es poco volumen; ver la nota en la memoria sobre R2.
 

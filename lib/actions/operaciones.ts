@@ -1,12 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { dbSinZonas, getContexto } from "@/lib/db";
+import { dbSinZonas, getContextoEscritura } from "@/lib/db";
+import type { UbicacionEnviada } from "@/lib/validations/ubicacion";
 import { frase, registrarActividad } from "@/lib/actividad";
 import { operacionSchema, type OperacionInput } from "@/lib/validations/operacion";
 
-export async function crearOperacion(inmuebleId: string, data: OperacionInput) {
-  const ctx = await getContexto();
+export async function crearOperacion(inmuebleId: string, data: OperacionInput, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
   const { db } = ctx;
   const parsed = operacionSchema.safeParse(data);
   if (!parsed.success) {

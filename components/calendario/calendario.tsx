@@ -26,6 +26,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { borradorDesdeFechas, EventoDialog, type BorradorEvento } from "@/components/calendario/evento-dialog";
 import { DetalleDialog } from "@/components/calendario/detalle-dialog";
+import { AvisoUbicacion } from "@/components/ubicacion/aviso-ubicacion";
+import { useLugar } from "@/components/ubicacion/ubicacion-provider";
 
 const VISTAS = {
   dayGridMonth: "Mes",
@@ -70,6 +72,8 @@ function ContenidoEvento({ event, timeText }: EventContentArg) {
 
 export default function Calendario() {
   const ref = useRef<FullCalendar>(null);
+  // Moving an appointment saves it: checked when the drag starts and on drop.
+  const lugar = useLugar();
   const [titulo, setTitulo] = useState("");
   const [vista, setVista] = useState<Vista>(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? "listWeek" : "dayGridMonth"
@@ -143,30 +147,35 @@ export default function Calendario() {
           toast.info("Un próximo contacto es para todo el día: suéltalo en la fila «Todo el día» o en la vista Mes.");
           return;
         }
-        const r = await moverProximoContacto(
-          item.id,
-          format(inicio, "yyyy-MM-dd"),
-          item.cliente ? "cliente" : "inmueble"
-        );
+        const dia = format(inicio, "yyyy-MM-dd");
+        const de = item.cliente ? "cliente" : "inmueble";
+        const r = await lugar.guardar((ub) => moverProximoContacto(item.id, dia, de, ub));
+        if (!r) {
+          info.revert();
+          return;
+        }
         if (!r.success) throw new Error(r.error);
         toast.success(`Próximo contacto movido al ${cuando}.`);
         return;
       }
 
-      const r = await moverEvento(
-        item.id,
-        event.allDay
-          ? {
-              todoElDia: true,
-              inicio: format(inicio, "yyyy-MM-dd"),
-              fin: format(event.end ?? addDays(inicio, 1), "yyyy-MM-dd"),
-            }
-          : {
-              todoElDia: false,
-              inicio: inicio.toISOString(),
-              fin: (event.end ?? addHours(inicio, 1)).toISOString(),
-            }
-      );
+      const fechas = event.allDay
+        ? {
+            todoElDia: true as const,
+            inicio: format(inicio, "yyyy-MM-dd"),
+            fin: format(event.end ?? addDays(inicio, 1), "yyyy-MM-dd"),
+          }
+        : {
+            todoElDia: false as const,
+            inicio: inicio.toISOString(),
+            fin: (event.end ?? addHours(inicio, 1)).toISOString(),
+          };
+      const r = await lugar.guardar((ub) => moverEvento(item.id, fechas, ub));
+      if (!r) {
+        // Not from here: the toast and the banner say why.
+        info.revert();
+        return;
+      }
       if (!r.success) throw new Error(r.error);
       // Resizing reports endDelta; dropping reports delta.
       toast.success("endDelta" in info ? "Duración actualizada." : `Movido al ${cuando}.`);
@@ -178,6 +187,7 @@ export default function Calendario() {
 
   return (
     <div className="rise flex flex-col gap-4 [animation-delay:60ms]">
+      <AvisoUbicacion lugar={lugar} />
       {/* Toolbar */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center gap-2">
@@ -292,6 +302,8 @@ export default function Calendario() {
             if (item.fuente === "evento") setBorrador(borradorDeEvento(info.event));
             else setDetalle(item);
           }}
+          eventDragStart={lugar.iniciar}
+          eventResizeStart={lugar.iniciar}
           eventDrop={guardarFechas}
           eventResize={guardarFechas}
         />

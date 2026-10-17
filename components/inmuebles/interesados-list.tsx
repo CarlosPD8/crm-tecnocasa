@@ -10,6 +10,8 @@ import { agregarInteres, quitarInteres } from "@/lib/actions/intereses";
 import { ClientePicker } from "@/components/shared/cliente-picker";
 import { Initials, ItemList, ItemRow, ListHeading } from "@/components/shared/item-list";
 import { Button } from "@/components/ui/button";
+import { AvisoUbicacion } from "@/components/ubicacion/aviso-ubicacion";
+import { useLugar } from "@/components/ubicacion/ubicacion-provider";
 
 export type InteresadoItem = {
   id: string;
@@ -29,11 +31,13 @@ export function InteresadosList({
     null
   );
   const [isPending, startTransition] = useTransition();
+  const lugar = useLugar();
 
   function handleAgregar() {
     if (!nuevoCliente) return;
     startTransition(async () => {
-      const result = await agregarInteres(inmuebleId, nuevoCliente.id);
+      const result = await lugar.guardar((ub) => agregarInteres(inmuebleId, nuevoCliente.id, ub));
+      if (!result) return;
       if (!result.success) {
         toast.error(result.error);
         return;
@@ -45,7 +49,8 @@ export function InteresadosList({
 
   function handleQuitar(interesId: string) {
     startTransition(async () => {
-      const result = await quitarInteres(interesId);
+      const result = await lugar.guardar((ub) => quitarInteres(interesId, ub));
+      if (!result) return;
       if (!result.success) {
         toast.error(result.error);
         return;
@@ -55,7 +60,8 @@ export function InteresadosList({
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-5" {...lugar.alInteractuar}>
+      <AvisoUbicacion lugar={lugar} />
       <div className="flex flex-col gap-2 rounded-xl bg-surface/60 p-3 sm:flex-row sm:items-center">
         <div className="min-w-0 flex-1">
           <ClientePicker
@@ -65,7 +71,7 @@ export function InteresadosList({
             placeholder="Buscar cliente para marcar interés…"
           />
         </div>
-        <Button type="button" disabled={!nuevoCliente || isPending} onClick={handleAgregar}>
+        <Button type="button" disabled={!nuevoCliente || isPending || lugar.bloqueado} onClick={handleAgregar}>
           <Plus /> Añadir interesado
         </Button>
       </div>

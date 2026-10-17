@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getContexto, SIN_PERMISO } from "@/lib/db";
+import { getContextoEscritura, SIN_PERMISO } from "@/lib/db";
+import type { UbicacionEnviada } from "@/lib/validations/ubicacion";
 import { frase, registrarActividad } from "@/lib/actividad";
 import {
   subirArchivoStorage,
@@ -22,8 +23,10 @@ function errorArchivo(file: FormDataEntryValue | null, soloImagen = false) {
   return null;
 }
 
-export async function subirArchivoCliente(clienteId: string, formData: FormData) {
-  const { db, oficinaId } = await getContexto();
+export async function subirArchivoCliente(clienteId: string, formData: FormData, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
+  const { db, oficinaId } = ctx;
 
   const file = formData.get("file");
   const errorFile = errorArchivo(file);
@@ -76,9 +79,12 @@ export async function subirArchivoCliente(clienteId: string, formData: FormData)
 export async function subirArchivoInmueble(
   inmuebleId: string,
   categoria: CategoriaArchivo,
-  formData: FormData
+  formData: FormData,
+  ub: UbicacionEnviada
 ) {
-  const { db, oficinaId } = await getContexto();
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
+  const { db, oficinaId } = ctx;
 
   const file = formData.get("file");
   const errorFile = errorArchivo(file, categoria === "FOTO");
@@ -137,8 +143,10 @@ export async function subirArchivoInmueble(
 }
 
 /** Directors delete any file; advisors only the ones they uploaded. */
-export async function eliminarArchivo(archivoId: string) {
-  const { db, usuario, esDirector } = await getContexto();
+export async function eliminarArchivo(archivoId: string, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
+  const { db, usuario, esDirector } = ctx;
 
   const archivo = await db.archivo.findUnique({
     where: { id: archivoId },
@@ -174,8 +182,10 @@ export async function eliminarArchivo(archivoId: string) {
 }
 
 /** Not logged: reordering photos tells a director nothing about the work done. */
-export async function moverFoto(archivoId: string, direccion: "arriba" | "abajo") {
-  const { db } = await getContexto();
+export async function moverFoto(archivoId: string, direccion: "arriba" | "abajo", ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
+  const { db } = ctx;
 
   const archivo = await db.archivo.findUnique({
     where: { id: archivoId },

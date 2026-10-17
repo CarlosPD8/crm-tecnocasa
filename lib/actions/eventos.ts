@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { existe, getContexto, SIN_PERMISO, type Contexto, type DbOficina } from "@/lib/db";
+import { existe, getContexto, getContextoEscritura, SIN_PERMISO, type Contexto, type DbOficina } from "@/lib/db";
+import type { UbicacionEnviada } from "@/lib/validations/ubicacion";
 import {
   aFecha,
   aValor,
@@ -201,8 +202,9 @@ function datosEvento(data: EventoInput) {
   };
 }
 
-export async function crearEvento(data: EventoInput) {
-  const ctx = await getContexto();
+export async function crearEvento(data: EventoInput, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
   const { db } = ctx;
   const parsed = eventoSchema.safeParse(data);
   if (!parsed.success) {
@@ -225,8 +227,9 @@ export async function crearEvento(data: EventoInput) {
   return { success: true as const, evento: eventoAItem(evento, ctx) };
 }
 
-export async function actualizarEvento(id: string, data: EventoInput) {
-  const ctx = await getContexto();
+export async function actualizarEvento(id: string, data: EventoInput, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
   const { db } = ctx;
   const parsed = eventoSchema.safeParse(data);
   if (!parsed.success) {
@@ -257,8 +260,10 @@ export async function actualizarEvento(id: string, data: EventoInput) {
 }
 
 /** Drag & drop and resize: only the dates change. */
-export async function moverEvento(id: string, data: MoverEventoInput) {
-  const { db } = await getContexto();
+export async function moverEvento(id: string, data: MoverEventoInput, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
+  const { db } = ctx;
   const parsed = moverEventoSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: "Esas fechas no son válidas." };
@@ -288,8 +293,10 @@ export async function moverEvento(id: string, data: MoverEventoInput) {
 }
 
 /** Directors delete any event; advisors only the ones they created. */
-export async function eliminarEvento(id: string) {
-  const { db, usuario, esDirector } = await getContexto();
+export async function eliminarEvento(id: string, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
+  const { db, usuario, esDirector } = ctx;
   const evento = await db.evento.findUnique({ where: { id }, select: { creadoPorId: true, titulo: true } });
   if (!evento) return { success: false as const, error: "Este evento ya no existe." };
   if (!esDirector && evento.creadoPorId !== usuario.id) return SIN_PERMISO;
@@ -321,8 +328,10 @@ async function seguimientoActual(db: DbOficina, de: "cliente" | "inmueble", id: 
 }
 
 /** Dragging a follow-up in the calendar reschedules the client's or the property's next contact. */
-export async function moverProximoContacto(id: string, dia: string, de: "cliente" | "inmueble" = "cliente") {
-  const { db } = await getContexto();
+export async function moverProximoContacto(id: string, dia: string, de: "cliente" | "inmueble", ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
+  const { db } = ctx;
   if (!DIA_RE.test(dia)) {
     return { success: false as const, error: "Fecha no válida." };
   }

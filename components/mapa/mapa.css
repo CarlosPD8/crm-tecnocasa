@@ -1,0 +1,32 @@
+/* Zone names drawn on the map, and the office pin. */
+.leaflet-tooltip.mapa-etiqueta {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  color: oklch(0.25 0.02 80);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-shadow:
+    0 0 3px #fff,
+    0 0 3px #fff,
+    0 0 6px #fff;
+}
+
+.leaflet-tooltip.mapa-etiqueta::before {
+  display: none;
+}
+
+.mapa-oficina span {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: oklch(0.42 0.06 250);
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px oklch(0 0 0 / 0.35);
+}
+
+.mapa-colocando {
+  cursor: crosshair;
+}

@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { dbSinZonas, getContexto } from "@/lib/db";
+import { dbSinZonas, getContextoEscritura } from "@/lib/db";
+import type { UbicacionEnviada } from "@/lib/validations/ubicacion";
 import { frase, registrarActividad } from "@/lib/actividad";
 import {
   contactoInmuebleSchema,
@@ -11,8 +12,10 @@ import {
   type ContactoInput,
 } from "@/lib/validations/contacto";
 
-export async function crearContacto(clienteId: string, data: ContactoInput) {
-  const { db } = await getContexto();
+export async function crearContacto(clienteId: string, data: ContactoInput, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
+  const { db } = ctx;
   const parsed = contactoSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false as const, error: parsed.error.flatten().fieldErrors };
@@ -58,8 +61,9 @@ export async function crearContacto(clienteId: string, data: ContactoInput) {
  * the same record also lands in that client's history and both "last contact"
  * dates move together. The next follow-up belongs to the property.
  */
-export async function crearContactoInmueble(inmuebleId: string, data: ContactoInmuebleInput) {
-  const ctx = await getContexto();
+export async function crearContactoInmueble(inmuebleId: string, data: ContactoInmuebleInput, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
   const { db } = ctx;
   const parsed = contactoInmuebleSchema.safeParse(data);
   if (!parsed.success) {

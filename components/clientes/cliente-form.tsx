@@ -23,6 +23,8 @@ import {
   FormShell,
 } from "@/components/shared/form";
 import { AsesorSelect } from "@/components/shared/asesor-select";
+import { AvisoUbicacion } from "@/components/ubicacion/aviso-ubicacion";
+import { useLugar } from "@/components/ubicacion/ubicacion-provider";
 import type { Cliente } from "@/lib/generated/prisma/client";
 import type { OpcionAsesor } from "@/lib/db";
 
@@ -45,6 +47,7 @@ export function ClienteForm({
   asesorInicial?: string;
 }) {
   const router = useRouter();
+  const lugar = useLugar({ alAbrir: true });
   const {
     register,
     handleSubmit,
@@ -73,9 +76,10 @@ export function ClienteForm({
   });
 
   async function onSubmit(data: ClienteInput) {
-    const result = cliente
-      ? await actualizarCliente(cliente.id, data)
-      : await crearCliente(data);
+    const result = await lugar.guardar(async (ub) =>
+      cliente ? await actualizarCliente(cliente.id, data, ub) : await crearCliente(data, ub)
+    );
+    if (!result) return;
 
     if (!result.success) {
       // Surface server errors (e.g. duplicate DNI) next to their field.
@@ -95,6 +99,7 @@ export function ClienteForm({
 
   return (
     <FormShell onSubmit={handleSubmit(onSubmit)} noValidate className="max-w-4xl">
+      <AvisoUbicacion lugar={lugar} className="mt-4" />
       <FormSection title="Identidad" description="Cómo aparecerá el cliente en listados y búsquedas.">
         <Field label="Nombre" htmlFor="nombre" error={errors.nombre?.message}>
           <Input
@@ -203,7 +208,7 @@ export function ClienteForm({
         <Button type="button" variant="ghost" onClick={() => router.back()}>
           Cancelar
         </Button>
-        <Button type="submit" size="lg" disabled={isSubmitting}>
+        <Button type="submit" size="lg" disabled={isSubmitting || lugar.bloqueado}>
           {isSubmitting ? "Guardando…" : cliente ? "Guardar cambios" : "Crear cliente"}
         </Button>
       </FormActions>

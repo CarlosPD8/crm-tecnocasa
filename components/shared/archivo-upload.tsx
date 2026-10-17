@@ -7,6 +7,9 @@ import { UploadCloud, X } from "lucide-react";
 import { comprimirImagen, formatearMB, MAX_BYTES_ARCHIVO } from "@/lib/comprimir-imagen";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { AvisoUbicacion } from "@/components/ubicacion/aviso-ubicacion";
+import { useLugar } from "@/components/ubicacion/ubicacion-provider";
+import type { UbicacionEnviada } from "@/lib/validations/ubicacion";
 
 export function ArchivoUpload({
   onUpload,
@@ -14,12 +17,13 @@ export function ArchivoUpload({
   accept,
   hint = "PDF, imágenes u otros documentos (hasta 4 MB)",
 }: {
-  onUpload: (formData: FormData) => Promise<{ success: boolean; error?: string }>;
+  onUpload: (formData: FormData, ub: UbicacionEnviada) => Promise<{ success: boolean; error?: string }>;
   label?: string;
   accept?: string;
   hint?: string;
 }) {
   const [isPending, startTransition] = useTransition();
+  const lugar = useLugar();
   const [archivo, setArchivo] = useState<File | null>(null);
   const [arrastrando, setArrastrando] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -48,7 +52,8 @@ export function ArchivoUpload({
       }
       if (final !== file) formData.set("file", final);
 
-      const result = await onUpload(formData);
+      const result = await lugar.guardar((ub) => onUpload(formData, ub));
+      if (!result) return;
       if (!result.success) {
         toast.error(result.error ?? "No se pudo subir el archivo.");
         return;
@@ -70,7 +75,8 @@ export function ArchivoUpload({
   }
 
   return (
-    <form ref={formRef} action={handleSubmit}>
+    <form ref={formRef} action={handleSubmit} className="flex flex-col gap-3" {...lugar.alInteractuar}>
+      <AvisoUbicacion lugar={lugar} />
       <input
         ref={inputRef}
         id={inputId}
@@ -99,7 +105,7 @@ export function ArchivoUpload({
           >
             <X />
           </Button>
-          <Button type="submit" disabled={isPending}>
+          <Button type="submit" disabled={isPending || lugar.bloqueado}>
             {isPending ? "Subiendo…" : label}
           </Button>
         </div>

@@ -1,7 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { dbSinZonas, esUnicoViolado, getContexto, resolverAsesor, SIN_PERMISO, type Contexto } from "@/lib/db";
+import {
+  dbSinZonas,
+  esUnicoViolado,
+  getContexto,
+  getContextoEscritura,
+  resolverAsesor,
+  SIN_PERMISO,
+  type Contexto,
+} from "@/lib/db";
+import type { UbicacionEnviada } from "@/lib/validations/ubicacion";
 import { cambioCliente, frase, incluirCambiosCliente, registrarActividad } from "@/lib/actividad";
 import {
   busquedaExacta,
@@ -59,8 +68,9 @@ function datosCliente(data: ClienteInput, dni: string | null) {
   };
 }
 
-export async function crearCliente(data: ClienteInput) {
-  const ctx = await getContexto();
+export async function crearCliente(data: ClienteInput, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
   const { db } = ctx;
   const parsed = clienteSchema.safeParse(data);
   if (!parsed.success) {
@@ -95,8 +105,9 @@ export async function crearCliente(data: ClienteInput) {
   return { success: true as const, cliente };
 }
 
-export async function actualizarCliente(id: string, data: ClienteInput) {
-  const ctx = await getContexto();
+export async function actualizarCliente(id: string, data: ClienteInput, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
   const { db } = ctx;
   const parsed = clienteSchema.safeParse(data);
   if (!parsed.success) {
@@ -134,8 +145,10 @@ export async function actualizarCliente(id: string, data: ClienteInput) {
   return { success: true as const, cliente };
 }
 
-export async function eliminarCliente(id: string) {
-  const { db, esDirector } = await getContexto();
+export async function eliminarCliente(id: string, ub: UbicacionEnviada) {
+  const ctx = await getContextoEscritura(ub);
+  if (!ctx.ok) return ctx.fallo;
+  const { db, esDirector } = ctx;
   if (!esDirector) return SIN_PERMISO;
 
   const cliente = await db.cliente.findUnique({

@@ -11,6 +11,8 @@ import { ClientePicker } from "@/components/shared/cliente-picker";
 import { AffixInput, Field } from "@/components/shared/form";
 import { Initials, ItemList, ItemRow, ListHeading } from "@/components/shared/item-list";
 import { Button } from "@/components/ui/button";
+import { AvisoUbicacion } from "@/components/ubicacion/aviso-ubicacion";
+import { useLugar } from "@/components/ubicacion/ubicacion-provider";
 import { Textarea } from "@/components/ui/textarea";
 import { TIPO_OPERACION_LABELS } from "@/lib/validations/inmueble";
 import type { TipoOperacion } from "@/lib/generated/prisma/enums";
@@ -46,6 +48,7 @@ export function OperacionPanel({
   const [precioFinal, setPrecioFinal] = useState("");
   const [notas, setNotas] = useState("");
   const [isPending, startTransition] = useTransition();
+  const lugar = useLugar();
 
   const esVenta = tipoOperacionSugerida === "VENTA";
 
@@ -57,12 +60,9 @@ export function OperacionPanel({
     }
 
     startTransition(async () => {
-      const result = await crearOperacion(inmuebleId, {
-        clienteId: cliente.id,
-        tipoOperacion: tipoOperacionSugerida,
-        precioFinal,
-        notas,
-      });
+      const datos = { clienteId: cliente.id, tipoOperacion: tipoOperacionSugerida, precioFinal, notas };
+      const result = await lugar.guardar((ub) => crearOperacion(inmuebleId, datos, ub));
+      if (!result) return;
 
       if (!result.success) {
         const primerError = Object.values(result.error).flat()[0];
@@ -83,6 +83,7 @@ export function OperacionPanel({
         <form
           onSubmit={handleSubmit}
           className="flex flex-col gap-5 rounded-xl bg-accent/50 p-5 ring-1 ring-primary/15"
+          {...lugar.alInteractuar}
         >
           <div className="flex items-start gap-3">
             <span className="grid size-9 shrink-0 place-items-center rounded-[30%] bg-primary text-primary-foreground">
@@ -124,7 +125,13 @@ export function OperacionPanel({
               onChange={(e) => setNotas(e.target.value)}
             />
           </Field>
-          <Button type="submit" size="lg" disabled={isPending} className="w-full sm:w-auto sm:self-end">
+          <AvisoUbicacion lugar={lugar} />
+          <Button
+            type="submit"
+            size="lg"
+            disabled={isPending || lugar.bloqueado}
+            className="w-full sm:w-auto sm:self-end"
+          >
             {isPending ? "Guardando…" : `Cerrar ${esVenta ? "venta" : "alquiler"}`}
           </Button>
         </form>

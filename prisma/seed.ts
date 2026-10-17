@@ -65,11 +65,34 @@ function dia(dias: number, hora = 10, minuto = 0) {
 
 // ─── Zonas ───────────────────────────────────────────────────────────────────
 
+/** Contorno aproximado (GeoJSON, [lng, lat]); el director lo ajusta en Zonas. */
+const contorno = (...puntos: [number, number][]) => ({ type: "Polygon", coordinates: [[...puntos, puntos[0]]] });
+
 const ZONAS = [
-  { nombre: "Zaidín", color: "verde", notas: "Zaidín, Genil y la Vega." },
-  { nombre: "Centro", color: "azul", notas: "Centro, Ronda, Beiro y el norte." },
-  { nombre: "Albaicín-Realejo", color: "teja", notas: "Barrios históricos: Albaicín y Realejo." },
-] as const;
+  {
+    nombre: "Zaidín",
+    color: "verde",
+    notas: "Zaidín, Genil y la Vega.",
+    forma: contorno([-3.612, 37.168], [-3.582, 37.168], [-3.583, 37.152], [-3.598, 37.145], [-3.612, 37.152]),
+  },
+  {
+    nombre: "Centro",
+    color: "azul",
+    notas: "Centro, Ronda, Beiro y el norte.",
+    forma: contorno([-3.612, 37.168], [-3.594, 37.168], [-3.594, 37.184], [-3.606, 37.186], [-3.612, 37.178]),
+  },
+  {
+    nombre: "Albaicín-Realejo",
+    color: "teja",
+    notas: "Barrios históricos: Albaicín y Realejo.",
+    forma: contorno(
+      [-3.594, 37.168], [-3.582, 37.168], [-3.579, 37.18], [-3.586, 37.19], [-3.6, 37.19], [-3.606, 37.186], [-3.594, 37.184]
+    ),
+  },
+];
+
+/** La oficina de la demo, junto a Puerta Real. */
+const OFICINA_PUNTO = { latitud: 37.1716, longitud: -3.6003 };
 
 /** Zona de cada barrio de la demo. */
 function zonaDe(localidad: string) {
@@ -544,11 +567,13 @@ function diaUTC(dias: number) {
 }
 
 async function main() {
-  await base.oficina.upsert({
+  const oficina = await base.oficina.upsert({
     where: { id: OFICINA_DEMO },
     update: {},
-    create: { id: OFICINA_DEMO, nombre: "Demo" },
+    create: { id: OFICINA_DEMO, nombre: "Demo", ...OFICINA_PUNTO },
   });
+  // Se respeta lo que haya marcado el director (y el control de ubicación, apagado por defecto).
+  if (oficina.latitud === null) await base.oficina.update({ where: { id: OFICINA_DEMO }, data: OFICINA_PUNTO });
   const director = await base.usuario.findFirst({
     where: { oficinaId: OFICINA_DEMO, rol: "DIRECTOR", activo: true },
     orderBy: { createdAt: "asc" },

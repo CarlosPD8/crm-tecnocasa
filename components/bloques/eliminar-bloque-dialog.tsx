@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 
+import { useLugar } from "@/components/ubicacion/ubicacion-provider";
 import { eliminarBloque } from "@/lib/actions/bloques";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,10 +32,15 @@ export function EliminarBloqueDialog({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { guardar } = useLugar();
 
   function handleDelete() {
     startTransition(async () => {
-      const result = await eliminarBloque(bloqueId);
+      const result = await guardar((ub) => eliminarBloque(bloqueId, ub));
+      if (!result) {
+        setOpen(false);
+        return;
+      }
       if (!result.success) {
         // Close so the dialog doesn't cover the page behind the error toast.
         setOpen(false);

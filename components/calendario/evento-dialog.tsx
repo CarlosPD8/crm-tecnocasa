@@ -21,6 +21,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Field, Segmented } from "@/components/shared/form";
 import { ClientePicker } from "@/components/shared/cliente-picker";
 import { InmueblePicker } from "@/components/shared/inmueble-picker";
+import { AvisoUbicacion } from "@/components/ubicacion/aviso-ubicacion";
+import { useLugar } from "@/components/ubicacion/ubicacion-provider";
 
 type Enlace = { id: string; label: string } | null;
 
@@ -137,6 +139,7 @@ function EventoForm({
   const [errores, setErrores] = useState<Record<string, string[] | undefined>>({});
   const [confirmarBorrado, setConfirmarBorrado] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const lugar = useLugar({ alAbrir: true });
   const editando = Boolean(inicial.id);
 
   const set = <K extends keyof BorradorEvento>(k: K, v: BorradorEvento[K]) => setB((prev) => ({ ...prev, [k]: v }));
@@ -151,7 +154,10 @@ function EventoForm({
     const entrada = aEntrada(b);
     startTransition(async () => {
       try {
-        const result = editando ? await actualizarEvento(inicial.id!, entrada) : await crearEvento(entrada);
+        const result = await lugar.guardar(async (ub) =>
+          editando ? await actualizarEvento(inicial.id!, entrada, ub) : await crearEvento(entrada, ub)
+        );
+        if (!result) return;
         if (!result.success) {
           setErrores(result.error);
           // Errors without a field of their own here (e.g. a deleted client).
@@ -176,7 +182,8 @@ function EventoForm({
     }
     startTransition(async () => {
       try {
-        const result = await eliminarEvento(inicial.id!);
+        const result = await lugar.guardar((ub) => eliminarEvento(inicial.id!, ub));
+        if (!result) return;
         if (!result.success) {
           toast.error(result.error);
           return;
@@ -201,6 +208,8 @@ function EventoForm({
             : "Visitas, reuniones o cualquier cita de la oficina. Después podrás arrastrarlo a otro día o estirarlo en el calendario."}
         </DialogDescription>
       </DialogHeader>
+
+      <AvisoUbicacion lugar={lugar} />
 
       <Field label="Título" htmlFor="ev-titulo" error={errores.titulo?.[0]}>
         <Input
@@ -313,7 +322,7 @@ function EventoForm({
             type="button"
             variant={confirmarBorrado ? "destructive" : "ghost"}
             className={confirmarBorrado ? undefined : "text-muted-foreground hover:text-destructive"}
-            disabled={isPending}
+            disabled={isPending || lugar.bloqueado}
             onClick={handleEliminar}
             onBlur={() => setConfirmarBorrado(false)}
           >
@@ -326,7 +335,7 @@ function EventoForm({
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={isPending}>
+          <Button type="submit" disabled={isPending || lugar.bloqueado}>
             {isPending ? "Guardando…" : editando ? "Guardar cambios" : "Crear evento"}
           </Button>
         </div>
